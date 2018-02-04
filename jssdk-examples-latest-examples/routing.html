@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Basic routing A-B</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var endIcon = tomtom.L.icon({iconUrl: 'img/end.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+        var startIcon = tomtom.L.icon({iconUrl: 'img/start.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        function addMarkers(feature) {
+            var startPoint, endPoint;
+            if (feature.geometry.type === 'MultiLineString') {
+                startPoint = feature.geometry.coordinates[0][0].reverse(); //get first point from first line
+                endPoint = feature.geometry.coordinates.slice(-1)[0].slice(-1)[0].reverse(); //get last point from last line
+            } else {
+                startPoint = feature.geometry.coordinates[0].reverse();
+                endPoint = feature.geometry.coordinates.slice(-1)[0].reverse();
+            }
+            tomtom.L.marker(startPoint, {icon: startIcon}).addTo(map);
+            tomtom.L.marker(endPoint, {icon: endIcon}).addTo(map);
+        }
+
+        tomtom.routingKey('${api.key.routing}');
+        tomtom.routing()
+            .locations('52.3679,4.8786:52.3679,4.8798')
+            .go().then(function(routeJson) {
+                var route = tomtom.L.geoJson(routeJson, {
+                    onEachFeature: addMarkers,
+                    style: {color: '#00d7ff', opacity: 0.8}
+                }).addTo(map);
+                map.fitBounds(route.getBounds(), {padding: [5, 5]});
+            });
+
+    </script>
+</body>
+</html>

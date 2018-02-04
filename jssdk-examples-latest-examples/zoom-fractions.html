@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Fractional zoom</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label.disabled,
+        label.warning {
+            opacity: 0.5;
+        }
+
+        label.disabled~label.warning {
+            display: flex;
+            font-size: xx-small;
+            justify-content: center;
+        }
+
+        .warning {
+            display: none;
+        }
+
+    </style>
+</head>
+
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <form class='sidepanel'>
+            <div class='sidepanel-input-group'>
+                <h4>Zoom level: <span id='zoomLevel'></span></h4>
+            </div>
+            <div class='sidepanel-input-group' title="Forces the map's zoom level to always be a multiple of this value">
+                <input id='zoomSnap' type='range' value='1' step='0.1' min='0.1' max='8' oninput="this.form.zoomSnapLabel.value = 'Zoom snap: ' + this.value"
+                />
+                <output id='zoomSnapLabel'>Zoom snap: 1</output>
+            </div>
+            <div class='sidepanel-input-group' title='Zoom step used by the zoom buttons'>
+                <input id='zoomDelta' type='range' value='1' step='0.1' min='0.1' max='8' oninput="this.form.zoomDeltaLabel.value = ' Zoom controls delta: ' + this.value"
+                />
+                <output id='zoomDeltaLabel'>Zoom controls delta: 1</output>
+            </div>
+            <div class='sidepanel-input-group' title='Smaller values will make wheel-zooming faster (and vice versa)'>
+                <input id='wheelPxPerZoomLevel' type='range' value='60' step='5' min='5' max='800' oninput="this.form.wheelPxPerZoomLevelLabel.value = 'Mousewheel delta: ' + this.value + 'px'"
+                />
+                <output id='wheelPxPerZoomLevelLabel'>Mousewheel delta: 60px</output>
+            </div>
+        </form>
+        <div class='map-container use-all-space'>
+            <div id='map' class='use-all-space'></div>
+            <div id='layerSelectorRow'>
+                <label for='baseLayer'>
+                    Base Layer
+                    <select id='baseLayer' name='baseLayer' autocomplete='off'>
+                        <option value='vector' selected>Vector</option>
+                        <option value='raster'>Raster</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function(tomtom, window, document) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var map,
+                languageSelector,
+                languageLabel,
+                layerSelectorRow,
+                layerSelectorEl = document.getElementById('baseLayer'),
+                zoomLevelEl = document.getElementById('zoomLevel'),
+                zoomDeltaInputEl = document.getElementById('zoomDelta'),
+                zoomSnapInputEl = document.getElementById('zoomSnap'),
+                wheelPxPerZoomLevelInputEl = document.getElementById('wheelPxPerZoomLevel');
+
+            layerSelectorEl.onchange = updateMapLayer;
+            zoomDeltaInputEl.onchange = updateMap;
+            zoomSnapInputEl.onchange = updateMap;
+            wheelPxPerZoomLevelInputEl.onchange = updateMap;
+        
+            // Creating map
+            map = tomtom.L.map('map', {
+                key: '${api.key}',
+                // Zoom step used by the zoom buttons
+                zoomDelta: zoomDeltaInputEl.value,
+                // Forces the map's zoom level to always be a multiple of this value
+                zoomSnap: zoomSnapInputEl.value,
+                // How many scroll pixels mean a change of one full zoom level
+                wheelPxPerZoomLevel: wheelPxPerZoomLevelInputEl.value,
+                center: new L.LatLng(50, 50),
+                zoom: 2,
+                // Using the center of the view for zoom changes to avoid a bug when high zoomSnap is used
+                // https://github.com/Leaflet/Leaflet/issues/5531
+                scrollWheelZoom: 'center',
+                // Using raster and vector layers by default in this example
+                source: ['vector', 'raster'],
+                basePath: '${base.path}'
+            });
+
+            languageLabel = L.DomUtil.create('label');
+            languageLabel.innerHTML = 'Maps language';
+            languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'maps');
+            languageLabel.appendChild(languageSelector);
+            var languageWarning = L.DomUtil.create('label', 'warning');
+            languageWarning.innerHTML = 'Language selection is only possible for vector map tiles.';
+            tomtom.controlPanel({
+                position: 'bottomright',
+                title: 'Settings',
+                collapsed: true,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(languageLabel)
+                .addContent(languageWarning);
+
+            layerSelectorRow = document.getElementById('layerSelectorRow');
+
+            tomtom.controlPanel({
+                position: 'topright',
+                title: null,
+                show: null,
+                close: null,
+                collapsed: false,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(layerSelectorRow);
+
+            map.on('zoomstart zoom zoomend', updateZoomLevelDisplay);
+            updateZoomLevelDisplay();
+
+            /**
+             * Updates map with new zoom options
+             */
+            function updateMap() {
+                if (map) {
+                    // Zoom step used by the zoom buttons
+                    map.options.zoomDelta = zoomDeltaInputEl.value;
+                    // Forces the map's zoom level to always be a multiple of this value
+                    map.options.zoomSnap = zoomSnapInputEl.value;
+                    // How many scroll pixels mean a change of one full zoom level
+                    map.options.wheelPxPerZoomLevel = wheelPxPerZoomLevelInputEl.value;
+
+                    map.setView(new L.LatLng(50, 50), map.getBoundsZoom(map.getBounds()));
+                }
+            }
+
+            /**
+             * Update the zoom level display when the current zoom level of the map.
+             */
+            function updateZoomLevelDisplay() {
+                var z = Math.round(map.getZoom() * 100) / 100;
+                zoomLevelEl.innerHTML = z.toFixed(1);
+            }
+
+            /**
+             * Change the current active layer of the map.
+             * @param {HtmlEvent} evt
+             */
+            function updateMapLayer(evt) {
+                map.setMapSource(evt.target.value);
+                if (evt.target.value === 'vector') {
+                    languageLabel.classList.remove('disabled');
+                    languageSelector.disabled = false;
+                } else if (evt.target.value === 'raster') {
+                    languageLabel.classList.add('disabled');
+                    languageSelector.disabled = true;
+                }
+            }
+
+        })(tomtom, window, document);
+
+    </script>
+
+</body>
+
+</html>

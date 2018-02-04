@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map automated panning</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+        <div>
+            <button class='resizeButton' value='50%'>50%</button>
+            <button class='resizeButton' value='75%'>75%</button>
+            <button class='resizeButton' value='100%'>100%</button>
+        </div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        tomtom.controlPanel({
+            position: 'topright',
+            title: null,
+            show: null,
+            close: null,
+            collapsed: false,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(document.getElementById('map').nextElementSibling);
+
+        var buttons = document.getElementsByClassName('resizeButton');
+        for (var i = 0; i < buttons.length; i += 1) {
+            buttons[i].onclick = function() {
+                map.getContainer().style.width = this.value;
+                map.invalidateSize();
+            };
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom1.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom3.css'>
+    <link rel='stylesheet' type='text/css' href='js/vendor/leaflet-draw/dist/leaflet.draw.css'>
+    <script type='text/javascript' src='js/vendor/requirejs/require.js'></script>
+    <script type='text/javascript' src='config.js'></script>
+    <style type='text/css'>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #example {
+            height: 650px;
+        }
+
+        .output-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 600px;
+            width: 600px;
+        }
+
+        .loader-image {
+            margin-left: 50%;
+        }
+
+        .image-placeholder {
+            overflow: auto;
+        }
+
+        #map {
+            height: 300px;
+        }
+
+        .static-image-btn-container {
+            display: flex;
+            justify-content: center;
+        }
+
+        .textarea-size {
+            height: 50px;
+            min-height: 50px;
+        }
+
+    </style>
+</head>
+
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <div class='sidepanel'>
+            <div class='sidepanel-input-group'>
+                <h4>Zoom level: <span id='zoomLevel'></span></h4>
+            </div>
+            <div class='sidepanel-input-group' id='tomtom-language-selector-placeholder'>
+                <label>Language</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <select id='mapLayer' name='mapLayer'>
+                    <option value='basic'>basic</option>
+                    <option value='hybrid'>hybrid</option>
+                    <option value='labels'>labels</option>
+                </select>
+                <label for='mapLayer'>Layer</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <select id='mapStyle' name='mapStyle'>
+                    <option value='main'>main</option>
+                    <option value='night'>night</option>
+                </select>
+                <label for='mapStyle'>Style</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='text' id='width' name='Width' value='600' type='number' />
+                <label for='width'>Width</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='text' id='height' name='height' placeholder='Height' value='400' type='number' />
+                <label for='height'>Height</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <select id='format' name='format'>
+                    <option value='png'>PNG</option>
+                    <option value='jpg'>JPG</option>
+                </select>
+                <label for='format'>Format</label>
+            </div>
+            <input type='button' id='staticImageBtn' value='Generate static image' />
+        </div>
+        <div class='output-container'>
+            <div>
+                <div id='map' class='use-all-space'></div>
+            </div>
+
+            <label for='urlText'>URL:</label>
+            <textarea id='urlText' class='textarea-size'></textarea>
+            <label for='htmlText'>HTML: </label>
+            <textarea id='htmlText' class='textarea-size'></textarea>
+            <label>Static image:</label>
+            <div id='loader'></div>
+            <div id='imagePlaceholder' class='image-placeholder'>
+
+            </div>
+        </div>
+    </div>
+    <script>
+        require(['tomtom.min', 'leafletdraw'], function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var centerMarker = null;
+            
+            var map = tomtom.map('map', {
+                key: '${api.key}',
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+            map.on('zoomend moveend', function() {
+                drawSearchCenterMarker();
+            });
+            drawSearchCenterMarker();
+            
+
+            var shapes = new L.FeatureGroup();
+            map.addLayer(shapes);
+            map.addControl(drawToolbar());
+            map.on('draw:drawstart', function() {
+                shapes.clearLayers();
+            });
+            map.on('draw:created', function(e) {
+                shapes.addLayer(e.layer);
+            });
+
+            var languageSelectorPlaceholder = document.getElementById('tomtom-language-selector-placeholder');
+            var languageSelector = tomtom.languageSelector.getHtmlElement(new tomtom.localeService(), 'maps');
+            languageSelectorPlaceholder.insertBefore(languageSelector, languageSelectorPlaceholder.firstChild);
+
+            var imagePlaceholder = document.getElementById('imagePlaceholder');
+            var urlInput = document.getElementById('urlText');
+            var htmlInput = document.getElementById('htmlText');
+            var mapStyleInput = document.getElementById('mapStyle');
+            var mapLayerInput = document.getElementById('mapLayer');
+            var formatInput = document.getElementById('format');
+            
+            var staticImageBtn = document.getElementById('staticImageBtn');
+            
+            var widthInput = document.getElementById('width');
+            var heightInput = document.getElementById('height');
+
+            var srcPlaceholder = '${src.placeholder}';
+            var htmlInputValuePrototype = '<img ' + srcPlaceholder + '/>';
+            var loader = document.getElementById('loader');
+            
+            staticImageBtn.onclick = function() {
+                updateView();
+            };
+            
+
+            mapStyleInput.onchange = updateLayersOptions('style');
+            mapLayerInput.onchange = updateLayersOptions('layer');
+
+            function updateLayersOptions(key) {
+                return function() {
+                    var option = {};
+                    option[key] = this.value;
+                    map.updateLayersOptions(option);
+                };
+            }
+
+            
+            function updateView() {
+                try {
+                    var url = getStaticMapImageUrl();
+                    var publicUrl = replaceKey(url);
+                    urlInput.value = publicUrl;
+                    htmlInput.value = htmlInputValuePrototype.replace(srcPlaceholder, 'src="' + publicUrl + '"');
+                    getImage(url);
+                } catch (err) {
+                    urlInput.value = err.message;
+                    htmlInput.value = err.message;
+                    imagePlaceholder.innerHTML = '';
+                }
+            }
+            
+
+            function removeAllChildren(elem) {
+                while (elem.firstChild) {
+                    elem.removeChild(elem.firstChild);
+                }
+            }
+
+            
+            function getImage(url) {
+                showLoader();
+                removeAllChildren(imagePlaceholder);
+                var image = new Image();
+                image.onload = function() {
+                    hideLoader();
+                    imagePlaceholder.appendChild(image);
+                };
+                image.onerror = function() {
+                    hideLoader();
+                    urlInput.value = 'Server responded with an error. Please check your api key or if parameters are valid';
+                    htmlInput.value = 'Server responded with an error. Please check your api key or if parameters are valid';
+                    removeAllChildren(imagePlaceholder);
+                };
+                image.src = url;
+            }
+            
+
+            function showLoader() {
+                loader.classList.add('loader', 'loader-image');
+            }
+
+            function hideLoader() {
+                loader.classList.remove('loader', 'loader-image');
+            }
+
+            function replaceKey(url) {
+                return url.replace('${api.key}', '<your api key>');
+            }
+
+            function getStaticMapImageUrl() {
+                var config = {}, result = null;
+                if (hasBoundingBox()) {
+                    config.bbox = getBoundingBox();
+                } else {
+                    config.center = map.getCenter();
+                    config.width = parseInt(widthInput.value);
+                    config.height = parseInt(heightInput.value);
+                }
+                config.key = '${api.key}';
+                config.zoom = map.getZoom();
+                config.language = languageSelector.value;
+                config.layer = mapLayerInput.value;
+                config.style = mapStyleInput.value;
+                config.format = formatInput.value;
+                new tomtom.staticMapImage(config).go(function(url) {
+                    result = url;
+                }, function(err) {
+                    throw err;
+                });
+                return result;
+            }
+
+            /**
+            * Draws toolbar, so you can support drawing rectangles as bounding box for static image
+            */
+            function drawToolbar() {
+                return new L.Control.Draw({
+                    draw: {
+                        polygon: false,
+                        circle: false,
+                        rectangle: true,
+                        marker: false,
+                        polyline: false,
+                        circlemarker: false
+                    },
+                    edit: {
+                        featureGroup: shapes,
+                        remove: false
+                    }
+                });
+            }
+
+            
+            /**
+             * Checks if user has drawn rectangle on the map to narrow static image area.
+             */
+            function hasBoundingBox() {
+                var shape = shapes.getLayers()[0];
+                return typeof shape !== 'undefined';
+            }
+
+            /**
+             * Gets bounding box of user's drawn rectangle area.
+             */
+            function getBoundingBox() {
+                var shape;
+                if (!hasBoundingBox()) {
+                    return null;
+                }
+
+                shape = shapes.getLayers()[0];
+                return shape.getBounds();
+            }
+
+            /*
+            * Draw marker on vector map, which points center of static map image
+            */
+            function drawSearchCenterMarker() {
+                var currentCenterOfMap = map.getCenter();
+                var tooltip = '<div><div>Map Center</div>' +
+                    '<div>Latitude: ' + currentCenterOfMap.lat + '</div>' +
+                    '<div>Longitude: ' + currentCenterOfMap.lng + '</div></div>';
+                if (centerMarker) {
+                    centerMarker.setLatLng(currentCenterOfMap);
+                    centerMarker.bindTooltip(tooltip);
+                    return;
+                }
+                var markerOptions = {
+                    icon: tomtom.L.icon({
+                        iconUrl: 'img/center_marker.svg',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    })
+                };
+
+                centerMarker = tomtom.L.marker([currentCenterOfMap.lat, currentCenterOfMap.lng], markerOptions)
+                    .bindTooltip(tooltip);
+                map.addLayer(centerMarker);
+            }
+            
+
+            function initializeZoomLevelDisplayUpdates() {
+                var zoomLevelElement = document.getElementById('zoomLevel');
+                function updateZoomLevelDisplay() {
+                    zoomLevelElement.innerHTML = map.getZoom() - 1;
+                }
+                updateZoomLevelDisplay();
+                map.on('zoom', updateZoomLevelDisplay);
+            }
+
+            initializeZoomLevelDisplayUpdates();
+        });
+    </script>
+</body>
+
+</html>

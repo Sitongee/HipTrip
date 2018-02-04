@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing including traffic</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        input[type=checkbox] {
+            margin: 3px;
+        }
+        input {
+            flex: initial;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+        <div>
+            <label for='tollRoads'>
+                <input type='checkbox' name='tollRoads' id='tollRoads' checked/>
+                Toll Roads
+            </label>
+            <label for='motorways'>
+                <input type='checkbox' name='motorways' id='motorways' checked/>
+                Motorways
+            </label>
+            <label for='ferries'>
+                <input type='checkbox' name='ferries' id='ferries' checked/>
+                Ferries
+            </label>
+            <label for='unpavedRoads'>
+                <input type='checkbox' name='unpavedRoads' id='unpavedRoads' checked/>
+                Unpaved Roads
+            </label>
+            <label for='carpools'>
+                <input type='checkbox' name='carpools' id='carpools' checked/>
+                Carpools
+            </label>
+            <label for='alreadyUsedRoads'>
+                <input type='checkbox' name='alreadyUsedRoads' id='alreadyUsedRoads' checked/>
+                Already Used Roads
+            </label>
+        </div>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var route,
+                avoidValues = ['tollRoads', 'motorways', 'ferries', 'unpavedRoads', 'carpools', 'alreadyUsedRoads'];
+
+            // Setting TomTom keys
+            tomtom.key('${api.key}');
+            tomtom.routingKey('${api.key.routing}');
+
+            // Creating map
+            var map = tomtom.map('map', {
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+
+            tomtom.controlPanel({
+                position: 'topleft',
+                title: null,
+                show: null,
+                close: null,
+                collapsed: false,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('map').nextElementSibling);
+
+            var routeResultsPanel = tomtom.controlPanel({
+                position: 'topright',
+                collapsed: false,
+                close: null,
+                closeOnMapClick: false
+            });
+            routeResultsPanel.addTo(map);
+
+            function formatTime(time) {
+                var mins = parseInt(time / 60);
+                var secs = parseInt(time % 60);
+                var hours = parseInt(mins / 60);
+                if (hours > 0) {
+                    mins = parseInt(mins % 60);
+                }
+
+                if (!secs && !mins && !hours) {
+                    return 'none';
+                }
+
+                var result = '';
+
+                if (hours) {
+                    result += hours + ' h ';
+                }
+
+                if (mins) {
+                    result += mins + ' min' + (mins === 1 ? ' ' : 's ');
+                }
+
+                if (secs) {
+                    result += secs + ' sec' + (secs === 1 ? '' : 's');
+                }
+
+                return result;
+            }
+
+            function formatLengthMetric(lengthInMeters) {
+                var kms = parseInt(lengthInMeters / 1000);
+
+                if (kms) {
+                    return (lengthInMeters / 1000).toFixed(2) + ' km';
+                } else {
+                    return lengthInMeters + ' m';
+                }
+
+            }
+
+            function createResults(route) {
+                var container = document.createElement('div');
+                container.className = 'results-list-container';
+                container.innerHTML = '<label>Travel distance: ' + formatLengthMetric(route.lengthInMeters) + '</label>';
+                container.innerHTML += '<label>Travel time: ' + formatTime(route.travelTimeInSeconds) + '</label>';
+                routeResultsPanel.setContent(container);
+            }
+
+            function calculateRoute() {
+                var avoids = avoidValues.filter(function(value) {
+                    return document.getElementById(value).checked;
+                });
+
+                tomtom.routing()
+                    .avoid(avoids)
+                    .locations('51.62425132980407,19.461679458618168:51.61364636258747,' +
+                        '19.502449035644535:51.72617752055949,19.448547363281254:52.87037316506269,' +
+                        '18.751602172851566:52.9130428994452,18.976135253906254:52.228220003460486,18.232498168945316')
+                    .go()
+                    .then(function(routeJson) {
+                        if (route) {
+                            map.removeLayer(route);
+                        }
+                        route = tomtom.L.geoJson(routeJson, {
+                            style: {color: '#00d7ff', opacity: 0.8}
+                        }).addTo(map);
+                        createResults(routeJson.features[0].properties.summary);
+                        map.fitBounds(route.getBounds(), {padding: [5, 5]});
+                    }
+                    );
+            }
+
+            avoidValues.forEach(function(value) {
+                document.getElementById(value).onchange = calculateRoute;
+            });
+            calculateRoute();
+        })(tomtom);
+    </script>
+</body>
+</html>

@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Along the route search</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+
+        .along-route-finder__header {
+            margin-top: 0;
+        }
+
+        .sidepanel input[type='text'],
+        .sidepanel input[type='range']{
+            width: 100%;
+            margin-bottom: 5px;
+            padding: 0;
+        }
+
+        .sidepanel input[type='submit'] {
+            margin-bottom: 0;
+            color: white;
+            border: 0px;
+            margin-top: 10px;
+            font-weight: bolder;
+            line-height: initial;
+        }
+
+        .along-route-finder__sidepanel {
+            width: 220px;
+            margin-right: 0;
+            min-width: 0;
+        }
+
+    </style>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+<div id='loader' class='loader loader-center'></div>
+<div id='map' class='use-all-space'></div>
+<script>
+    // Define your product name and version
+    tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+    function RouteFinder() {
+        this._locations = [null, null];
+        this._onRouteChanged = null;
+        this._points = null;
+
+        this._routeInputsInstance = tomtom.routeInputs();
+
+        this._routeInputsInstance.on(this._routeInputsInstance.Events.LocationsFound, function(eventObject) {
+            this._updateLocations(eventObject.points);
+        }, this);
+        this._routeInputsInstance.on(this._routeInputsInstance.Events.LocationsCleared, function(eventObject) {
+            this._updateLocations(eventObject.points);
+        }, this);
+
+        this._endIcon = tomtom.L.icon({iconUrl: 'img/end.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+        this._startIcon = tomtom.L.icon({iconUrl: 'img/start.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+
+    }
+
+    RouteFinder.prototype._isThereAnyEmptyLocation = function() {
+        return this._locations.some(function(location) {
+            return !location;
+        });
+    };
+
+    RouteFinder.prototype._prepareLocationsForRouting = function() {
+        return this._locations.map(function(location) {
+            return location.lat + ',' + (Number.isFinite(location.lon) ? location.lon : location.lng);
+        }).join(':');
+    };
+
+    RouteFinder.prototype._areLocationsEqual = function(loc1, loc2) {
+        return loc1 === loc2 || (loc1 && loc2 && L.latLng(loc1).equals(L.latLng(loc2)));
+    };
+
+    RouteFinder.prototype._updateMarker = function(oldLocation, newLocation, marker, icon) {
+        if (!this._areLocationsEqual(oldLocation, newLocation) && marker) {
+            marker.remove();
+            marker = null;
+        }
+
+        if (newLocation && !marker) {
+            marker = tomtom.L.marker(newLocation, {icon: icon});
+            marker.addTo(this._map);
+        }
+
+        return marker;
+    };
+
+    RouteFinder.prototype._updateMarkers = function(newLocations) {
+        this._startMarker = this._updateMarker(this._locations[0], newLocations[0], this._startMarker, this._startIcon);
+        this._endMarker = this._updateMarker(this._locations[1], newLocations[1], this._endMarker, this._endIcon);
+    };
+
+    RouteFinder.prototype._updateLocations = function(locations) {
+        var that = this;
+
+        this._updateMarkers(locations);
+
+        this._locations = locations;
+
+        if (this._points) {
+            this._points.remove();
+            this._points = null;
+        }
+
+        if (this._isThereAnyEmptyLocation()) {
+            if (this._onRouteChanged) {
+                this._onRouteChanged();
+            }
+            return;
+        }
+
+        tomtom.routing()
+            .locations(this._prepareLocationsForRouting())
+            .go().then(function(routeJson) {
+                that._points = tomtom.L.geoJson(routeJson, {
+                    style: {color: '#00d7ff', opacity: 0.8}
+                }).addTo(that._map);
+                that._map.fitBounds(that._points.getBounds(), {padding: [5, 5]});
+                that._map.zoomOut(1);
+                if (that._onRouteChanged) {
+                    that._onRouteChanged(routeJson);
+                }
+            })
+            .catch(function(err) {
+                that._onError(err);
+            });
+    };
+
+    RouteFinder.prototype.addTo = function(map) {
+        this._map = map;
+        this._routeInputsInstance.addTo(map);
+    };
+
+    RouteFinder.prototype.setOnRouteChanged = function(callback) {
+        if (typeof callback !== 'function') {
+            return;
+        }
+        this._onRouteChanged = callback;
+    };
+
+    RouteFinder.prototype.setOnError = function(errorCallback) {
+        if (typeof errorCallback !== 'function') {
+            return;
+        }
+        this._onError = errorCallback;
+    };
+
+    function InputValuesKeeper(notEmptyValuesNames) {
+        this._values = {};
+        this._notEmptyValuesNames = notEmptyValuesNames || [];
+    }
+
+    InputValuesKeeper.prototype._checkIfRequiredValuesAreNotEmpty = function() {
+        var that = this;
+        return this._notEmptyValuesNames.every(function(name) {
+            return that._values[name];
+        });
+    };
+
+    InputValuesKeeper.prototype.setValue = function(name, value) {
+        this._values[name] = value;
+        var emptinessCheckResult = this._checkIfRequiredValuesAreNotEmpty();
+        if (this._onEmptinessCheck) {
+            this._onEmptinessCheck(emptinessCheckResult);
+        }
+    };
+
+    InputValuesKeeper.prototype.getValue = function(name) {
+        return this._values[name];
+    };
+
+    InputValuesKeeper.prototype.setOnEmptinessCheck = function(callback) {
+        this._onEmptinessCheck = callback;
+    };
+
+    function SearchResultPresenter() {
+        this._markerLayer = L.tomTomMarkersLayer();
+        this._resultsList = new ResultsList();
+    }
+
+    SearchResultPresenter.prototype.addTo = function(map) {
+        this._markerLayer.addTo(map);
+        this._resultsList.addTo(map);
+    };
+
+    SearchResultPresenter.prototype.show = function(pois) {
+        this._markerLayer.setMarkersData(pois)
+            .addMarkers();
+        this._resultsList.setResults(pois, this._markerLayer.getMarkers());
+    };
+
+    SearchResultPresenter.prototype.clear = function() {
+        this._markerLayer.clearLayers();
+        this._resultsList.clear();
+    };
+
+    function AlongRouteFinder() {
+        this._classes = {
+            header: 'along-route-finder__header',
+            sidepanel: 'sidepanel along-route-finder__sidepanel'
+        };
+        this._inputValuesKeeper = new InputValuesKeeper(['query', 'limit', 'maxDetourTime', 'route']);
+
+        var formSubmitButton = this._createFormSubmitButton();
+
+        this._controlPanel = tomtom.controlPanel({
+            position: 'topleft',
+            collapsed: false,
+            close: null,
+            closeOnMapClick: false,
+            footer: formSubmitButton
+        });
+
+        this._points = [];
+        this._searchResultPresenter = new SearchResultPresenter();
+
+        this._inputFieldsPanel = this._createFormInputFields();
+
+        this._loader = document.getElementById('loader');
+    }
+
+    AlongRouteFinder.prototype._showLoader = function() {
+        this._loader.style.display = 'block';
+    };
+
+    AlongRouteFinder.prototype._hideLoader = function() {
+        this._loader.style.display = 'none';
+    };
+
+    AlongRouteFinder.prototype._createFormHeader = function() {
+        var header = tomtom.L.DomUtil.create('h4', this._classes.header);
+        header.innerText = 'Search along route parameters';
+        return header;
+    };
+
+    AlongRouteFinder.prototype._createRangeInput = function(min, max, currentValue) {
+        var rangeInput = tomtom.L.DomUtil.create('input');
+        rangeInput.setAttribute('type', 'range');
+        rangeInput.setAttribute('min', min);
+        rangeInput.setAttribute('max', max);
+        rangeInput.setAttribute('value', currentValue);
+
+        return rangeInput;
+    };
+
+    AlongRouteFinder.prototype._createFormInputFields = function() {
+        var mainContainer = tomtom.L.DomUtil.create('div', this._classes.sidepanel);
+        var resultsLabelContainer = tomtom.L.DomUtil.create('div');
+        this._queryInput = tomtom.L.DomUtil.create('input');
+        this._queryInput.setAttribute('required', 'true');
+        this._queryInput.setAttribute('type', 'text');
+        this._queryInput.addEventListener('keypress', function(event) {
+            if (event.keyCode === 13) { //enter pressed
+                document.getElementById('tomtom-example-submit').click();
+            }
+        });
+
+        this._maxDetourTimeInput = this._createRangeInput('1', '3600', '900');
+
+        this._limitInput = this._createRangeInput('1', '20', '10');
+
+        mainContainer.appendChild(this._createInputFieldRow('Query', this._queryInput, 'query'));
+        mainContainer.appendChild(this._createInputFieldRow('Max detour time in seconds', this._maxDetourTimeInput, 'maxDetourTime'));
+        mainContainer.appendChild(this._createInputFieldRow('Limit', this._limitInput, 'limit'));
+        mainContainer.appendChild(resultsLabelContainer);
+        return mainContainer;
+    };
+
+    AlongRouteFinder.prototype._createInputFieldLabel = function(labelText, control, controlId) {
+        var that = this;
+        var label = tomtom.L.DomUtil.create('label');
+        label.setAttribute('for', controlId);
+
+        if (control.getAttribute('type') === 'range') {
+            var currentValue = control.value;
+            label.innerText = labelText + ' (' + currentValue + ')';
+            control.addEventListener('change', function() {
+                label.innerText = label.innerText.replace(/\(.+\)/, '(' + control.value + ')');
+            });
+        } else {
+            label.innerText = labelText;
+        }
+
+        control.addEventListener('input', function() {
+            that._inputValuesKeeper.setValue(controlId, control.value);
+        });
+
+        return label;
+    };
+
+    AlongRouteFinder.prototype._createInputFieldRow = function(labelText, control, controlId) {
+        control.setAttribute('id', controlId);
+
+        var mainContainer = tomtom.L.DomUtil.create('div');
+        var labelContainer = tomtom.L.DomUtil.create('div', '', mainContainer);
+        var controlContainer = tomtom.L.DomUtil.create('div', '', mainContainer);
+
+        var label = this._createInputFieldLabel(labelText, control, controlId);
+        labelContainer.appendChild(label);
+
+        controlContainer.appendChild(control);
+
+        //Initial value set
+        this._inputValuesKeeper.setValue(controlId, control.value);
+
+        return mainContainer;
+    };
+    AlongRouteFinder.prototype._clear = function() {
+        this._searchResultPresenter.clear();
+    };
+
+    AlongRouteFinder.prototype._createFormSubmitButton = function() {
+        var that = this;
+        var mainContainer = tomtom.L.DomUtil.create('div', this._classes.sidepanel);
+        this._submitButton = tomtom.L.DomUtil.create('input', null, mainContainer);
+        this._submitButton.setAttribute('value', 'Submit');
+        this._submitButton.setAttribute('id', 'tomtom-example-submit');
+        this._submitButton.setAttribute('type', 'submit');
+        this._submitButton.setAttribute('disabled', 'true');
+        this._submitButton.addEventListener('click', this._onFormSubmit.bind(this));
+
+        this._inputValuesKeeper.setOnEmptinessCheck(function(isNotEmpty) {
+            that._clear();
+
+            if (isNotEmpty) {
+                that._submitButton.removeAttribute('disabled');
+            } else {
+                that._submitButton.setAttribute('disabled', 'true');
+            }
+        });
+
+        return mainContainer;
+    };
+
+    AlongRouteFinder.prototype._onFormSubmit = function() {
+        var that = this;
+        this._clear();
+
+        this._showLoader();
+
+        var points = this._inputValuesKeeper.getValue('route');
+
+        var route = points.reduce(function(accumulator, point) {
+            accumulator.push({
+                lat: point[1],
+                lon: point[0]
+            });
+            return accumulator;
+        }, []);
+
+        var query = this._inputValuesKeeper.getValue('query');
+        var maxDetourTime = parseInt(this._inputValuesKeeper.getValue('maxDetourTime'), 10);
+        var limit = parseInt(this._inputValuesKeeper.getValue('limit'), 10);
+
+        tomtom.alongRouteSearch({
+            query: query,
+            maxDetourTime: maxDetourTime,
+            limit: limit,
+            route: route
+        }).go()
+            .then(function(response) {
+                that._hideLoader();
+                if (!response || !response.results || response.results.length === 0) {
+                    return;
+                }
+
+                that._searchResultPresenter.show(response.results);
+            })
+            .catch(function(err) {
+                that._onError(err);
+                that._hideLoader();
+            });
+    };
+
+    AlongRouteFinder.prototype._extractPointsFromRoute = function(routeJson) {
+        if (!routeJson || !routeJson.features || !routeJson.features[0]) {
+            return null;
+        }
+        var geometry = routeJson.features[0].geometry;
+        if (!geometry || !Array.isArray(geometry.coordinates)) {
+            return null;
+        }
+        return geometry.coordinates;
+    };
+
+    AlongRouteFinder.prototype.addTo = function(map) {
+        this._searchResultPresenter.addTo(map);
+
+        this._controlPanel.addTo(map);
+        this._controlPanel.addContentHeader(this._createFormHeader());
+        this._controlPanel.addContent(this._inputFieldsPanel);
+
+    };
+
+    AlongRouteFinder.prototype.setRoute = function(routeJson) {
+        var points = this._extractPointsFromRoute(routeJson);
+        if (!points) {
+            this._searchResultPresenter.clear();
+        }
+        this._inputValuesKeeper.setValue('route', points);
+    };
+
+    AlongRouteFinder.prototype.setOnError = function(errorCallback) {
+        if (typeof errorCallback !== 'function') {
+            return;
+        }
+        this._onError = errorCallback;
+    };
+
+    function ResultsList() {
+        this._resultsList = tomtom.resultsList();
+        this._addedToMap = false;
+        this._resultsSetAtLeastOnce = false;
+    }
+
+    ResultsList.prototype._getResultName = function(result) {
+        if (typeof result.poi !== 'undefined' && typeof result.poi.name !== 'undefined') {
+            return result.poi.name;
+        }
+
+        return '';
+    };
+
+    ResultsList.prototype._getResultAddress = function(result) {
+        if (typeof result.address !== 'undefined') {
+            var address = [];
+
+            if (typeof result.address.freeformAddress !== 'undefined') {
+                address.push(result.address.freeformAddress);
+            }
+
+            if (typeof result.address.countryCodeISO3 !== 'undefined') {
+                address.push(result.address.countryCodeISO3);
+            }
+
+            return address.join(', ');
+        }
+        return '';
+    };
+
+    ResultsList.prototype._getResultDetourTime = function(result) {
+        if (typeof result.detourTime !== 'undefined') {
+            return result.detourTime;
+        }
+        return '';
+    };
+
+    ResultsList.prototype._prepareResultElement = function(result) {
+        var resultElement = new tomtom.L.DomUtil.create('div', 'geoResponse-result');
+        var name = this._getResultName(result);
+        var adress = this._getResultAddress(result);
+        var detourTime = this._getResultDetourTime(result);
+
+        if (typeof name !== 'undefined') {
+            var nameWrapper = tomtom.L.DomUtil.create('div', 'geoResponse-result-name');
+            nameWrapper.innerHTML = name;
+            resultElement.appendChild(nameWrapper);
+        }
+
+        if (typeof adress !== 'undefined') {
+            var addressWrapper = tomtom.L.DomUtil.create('div', 'geoResponse-result-address');
+            addressWrapper.innerHTML = adress;
+            resultElement.appendChild(addressWrapper);
+        }
+
+        if (typeof detourTime !== 'undefined') {
+            var detourTimeElement = tomtom.L.DomUtil.create('div', 'geoResponse-result-detour');
+            detourTimeElement.innerHTML = detourTime + ' seconds';
+            resultElement.appendChild(detourTimeElement);
+        }
+
+        return resultElement;
+    };
+
+    ResultsList.prototype.addTo = function(map) {
+        this._map = map;
+        this._addedToMap = true;
+        this._resultsList.addTo(map);
+    };
+
+    ResultsList.prototype._getMarkerForLatLng = function(lat, lng, markers) {
+        var latlng = tomtom.L.latLng(parseFloat(lat), parseFloat(lng));
+        var index;
+        for (index = 0; index < markers.length; ++index) {
+            if (markers[index].getLatLng().equals(latlng)) {
+                return markers[index];
+            }
+        }
+        return null;
+    };
+
+    ResultsList.prototype.setResults = function(searchResults, markers) {
+        var that = this;
+        this._resultsList.clear().unfold();
+        if (!searchResults && !Array.isArray(searchResults)) {
+            return;
+        }
+        this._resultsSetAtLeastOnce = true;
+
+        searchResults.forEach(function(result) {
+            var postion = result.position;
+            var marker = that._getMarkerForLatLng(postion.lat, postion.lon, markers);
+            var resultContent = that._prepareResultElement(result);
+            var viewport = result.viewport;
+            that._resultsList.addContent(resultContent);
+            resultContent.onclick = function() {
+                if (viewport) {
+                    that._map.fitBounds([viewport.topLeftPoint, viewport.btmRightPoint]);
+                } else {
+                    that._map.panTo(marker.getLatLng());
+                }
+                marker.openPopup();
+            };
+        });
+    };
+
+    ResultsList.prototype.clear = function() {
+        if (this._addedToMap && this._resultsSetAtLeastOnce) {
+            this._resultsList.clear();
+            this._resultsList.addContent('Fill in the form on the left and press enter to run search.');
+            this._resultsList.unfold();
+        }
+    };
+
+    function ErrorMessage(map) {
+        this._map = map;
+        this._closeAfter = 3000;
+    }
+
+    ErrorMessage.prototype._generateErrorMessage = function(error) {
+        return error && error.message || (error.error && error.error.description) || 'Error occured';
+    };
+
+    ErrorMessage.prototype.displayTemporaryMessage = function(error) {
+        var message = this._generateErrorMessage(error);
+        tomtom.messageBox({closeAfter: this._closeAfter}).setContent(message).openOn(this._map);
+    };
+
+    //////// Initialization /////////
+
+    //Setting TomTom keys
+    tomtom.routingKey('${api.key.routing}');
+    tomtom.searchKey('${api.key.search}');
+
+    // Creating map
+    var map = tomtom.L.map('map', {
+        key: '${api.key}',
+        basePath: '${base.path}',
+        source: 'vector'
+    });
+    map.zoomControl.remove();
+
+    var routeFinder = new RouteFinder();
+    routeFinder.addTo(map);
+
+    var alongRouteFinder = new AlongRouteFinder();
+    alongRouteFinder.addTo(map);
+
+    var errorMessage = new ErrorMessage(map);
+
+    alongRouteFinder.setOnError(function(error) {
+        errorMessage.displayTemporaryMessage(error);
+    });
+
+    routeFinder.setOnError(function(error) {
+        errorMessage.displayTemporaryMessage(error);
+    });
+
+    routeFinder.setOnRouteChanged(function(routeJson) {
+        alongRouteFinder.setRoute(routeJson);
+    });
+
+</script>
+</body>
+</html>

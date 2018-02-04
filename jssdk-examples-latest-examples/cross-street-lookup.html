@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <script type='text/javascript' src='js/vendor/requirejs/require.js'></script>
+    <script type='text/javascript' src='config.js'></script>
+</head>
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <div id='tomtom-example-inputs' class='sidepanel'>
+            <h4>Cross street lookup parameters</h4>
+            <form onsubmit='return false'>
+                <div id='tomtom-example-inputsWrapper' class='scrollbar'>
+                    <div id='langParam' class='sidepanel-input-group'>
+                        <label>Language</label>
+                    </div>
+                <div class='sidepanel-input-group'>
+                    <input type='text' id='latParam' name='position'
+                        placeholder='Lat value'
+                        pattern='((-?\d*(\.\d+)?))'
+                        title='must contain position value, e.g.: 37.553' value='50.8480065'/>
+                    <label for='latParam'>Latitude</label>
+                </div>
+                <div class='sidepanel-input-group'>
+                    <input type='text' id='lonParam' name='position'
+                        placeholder='Lon value'
+                        pattern='((-?\d*(\.\d+)?))'
+                        title='must contain position value, e.g.: -122.453' value='4.3696404'/>
+                    <label for='lonParam'>Longitude</label>
+                </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='range' id='radius' name='radius' min='0' max='100000' value='10000' />
+                        <label id='radiusAmount' for='radius'>Radius (10000 m)</label>
+                    </div>
+                </div>
+                <input type='submit' id='tomtom-example-submit' value='Submit'/>
+            </form>
+        </div>
+        <div id='map' class='flex-expand'></div>
+    </div>
+    <script>
+    require(['tomtom.min'], function(tomtom) {
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+        var radiusElement = document.getElementById('radius');
+        var languageSelector = tomtom.languageSelector.getHtmlElement(new tomtom.localeService(), 'search');
+        var latInput = document.getElementById('latParam');
+        var lngInput = document.getElementById('lonParam');
+        var langParam = document.getElementById('langParam');
+        var radiusAmountElement = document.getElementById('radiusAmount');
+
+        /*
+        * Adds first marker
+        */
+        var marker = tomtom.L.marker([50.8480065, 4.3696404])
+            .addTo(map)
+            .bindPopup('Click anywhere on the map to get its address.')
+            .openPopup();
+        map.setView([50.8515, 4.3705], 13);
+        langParam.insertBefore(languageSelector, langParam.firstChild);
+        tomtom.searchKey('${api.key.search}');
+
+        document.getElementById('tomtom-example-submit').onclick = function() {
+            callCrossStreetLookup(latInput.value, lngInput.value);
+        };
+
+        /*
+        * Manages clicks on the map (showing marker with full address in the clicked place on the map)
+        */
+        map.on('click', function(event) {
+            var position = event.latlng;
+            latInput.value = position.lat.toFixed(7);
+            lngInput.value = position.lng.toFixed(7);
+            callCrossStreetLookup(latInput.value, lngInput.value);
+        });
+
+        function callCrossStreetLookup(lat, lng) {
+            var joinedCoordinates = lat + ',' + lng;
+            var callable = tomtom.crossStreetLookup().position(joinedCoordinates).radius(radiusElement.value);
+            var selectedLangCode = languageSelector.options[languageSelector.selectedIndex].value;
+
+            callable.language(selectedLangCode);
+
+            callable.go(function(geoResponse) {
+                drawMarkerOnMap(geoResponse, geoResponse.position);
+            });
+        }
+
+        function drawMarkerOnMap(geoResponse, position) {
+            var popupContent;
+            if (typeof position === 'string') {
+                position = position.split(/[ ,]/);
+            } else if (position === undefined) {
+                position = [0, 0];
+            }
+            if (geoResponse) {
+                popupContent = geoResponse.address.freeformAddress || 'Cannot get free-form address.';
+            } else {
+                popupContent = 'Cannot find given location. </br>Try to zoom in or click on another place.';
+            }
+
+            map.removeLayer(marker);
+            marker = tomtom.L.marker(position)
+                .addTo(map)
+                .bindPopup(popupContent)
+                .openPopup();
+            map.panTo(marker.getLatLng());
+        }
+
+        function handleRadiusUpdate() {
+            radiusAmountElement.innerHTML = 'Radius (' + radiusElement.value + ' m)';
+        }
+
+        radiusElement.onchange = handleRadiusUpdate;
+
+    });
+
+    </script>
+</body>
+</html>

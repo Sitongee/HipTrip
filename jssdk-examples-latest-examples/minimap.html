@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - MiniMap</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label.disabled,
+        label.warning {
+            opacity: 0.5;
+        }
+        label.disabled ~ label.warning {
+            display: flex;
+            font-size: xx-small;
+            justify-content: center;
+        }
+        .warning {
+            display: none;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <form class='sidepanel' onsubmit='return false'>
+            <h4>MiniMap zoom: <span id='miniMapZoomLevel'></span></h4>
+            <div class='sidepanel-input-group'>
+                <select id='baseLayerSelect'>
+                    <option value='vector' selected='selected'>Vector</option>
+                    <option value='raster'>Raster</option>
+                </select>
+                <label for='baseLayerSelect'>MiniMap base layer</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='range' id='zoomLevelsOffset' name='zoomLevelsOffset' min='0' max='12' value='5'
+                    title='Zoom levels offset' />
+                <output name='zoomLevelsOffsetLabel' for='zoomLevelsOffset'>Zoom levels offset <span id='zoomLevelsOffsetValue'>(5)</span></output>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='range' id='minZoom' name='minZoom' min='2' max='10' value='2'
+                    title='MiniMap min zoom' />
+                <output name='minZoomLabel' for='minZoom'>MiniMap min zoom <span id='minZoomValue'>(2)</span></output>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='range' id='maxZoom' name='maxZoom' min='3' max='20' value='10'
+                    title='MiniMap max zoom' />
+                <output name='maxZoomLabel' for='maxZoom'>MiniMap max zoom <span id='maxZoomValue'>(10)</span></output>
+            </div>
+        </form>
+        <div class='map-container flex-expand'>
+            <div id='map' class='use-all-space absolute'></div>
+            <div class='flex-vertical'>
+                <label>Map zoom: <span id='mainMapZoomLevel'></span></label>
+                <label for='baseLayer'>
+                    Base Layer:
+                    <select id='baseLayer' name='baseLayer' autocomplete='off'>
+                        <option value='raster'>Raster</option>
+                        <option value='vector' selected='selected'>Vector</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+    </div>
+    <script>
+        
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Setting TomTom key
+        tomtom.key('${api.key}');
+
+        // Creating map
+        var map = tomtom.L.map('map', {
+            source: ['vector', 'raster'],
+            basePath: '${base.path}'
+        });
+        
+
+        map.setView([54.401346982784176, 18.533935546875], 12);
+
+        tomtom.controlPanel({
+            position: 'topright',
+            title: null,
+            show: null,
+            close: null,
+            collapsed: false,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(document.getElementById('map').nextElementSibling);
+
+        
+        // Create minimap
+        var miniMapOptions = {
+            height: 90,
+            width: 120,
+            zoomLevelOffset: -5, // zoom difference between main- and mini-maps (defaults to -8)
+
+            // below options have default values:
+            toggleDisplay: true, // show a button to hide/show mini-map
+            zoomAnimation: true, // animate zoom changes
+            autoToggleDisplay: true, // hide mini-map automatically if it's not needed
+            mapOptions: {
+                source: ['vector', 'raster'],
+                basePath: '${base.path}',
+                minZoom: 2, // min zoom of mini-map
+                maxZoom: 10 // max zoom of mini-map
+            }
+        };
+
+        var miniMapControl = tomtom.miniMap(miniMapOptions);
+        miniMapControl.addTo(map);
+        
+
+        var languageLabel = L.DomUtil.create('label');
+        languageLabel.innerHTML = 'Maps language';
+        var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'maps');
+        languageLabel.appendChild(languageSelector);
+        var languageWarning = L.DomUtil.create('label', 'warning');
+        languageWarning.innerHTML = 'Language selection is only possible for vector map tiles.';
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(languageLabel)
+            .addContent(languageWarning);
+
+        
+        // Update labels
+        function updateZoomLabels() {
+            document.getElementById('mainMapZoomLevel').textContent = map.getZoom();
+            document.getElementById('miniMapZoomLevel').textContent = miniMapControl.getZoom();
+        }
+        
+
+        function updateZoomSettingsLabel(labelId, labelValue) {
+            document.getElementById(labelId).textContent = '(' + labelValue + ')';
+        }
+
+        function updateZoomSettingsValue(controlId, value) {
+            document.getElementById(controlId).value = String(value);
+        }
+
+        function updateZoomSettingsLabels(settings) {
+            updateZoomSettingsLabel('zoomLevelsOffsetValue', Math.abs(settings.zoomLevelOffset));
+            updateZoomSettingsLabel('minZoomValue', settings.minZoom);
+            updateZoomSettingsLabel('maxZoomValue', settings.maxZoom);
+        }
+
+        function updateZoomSettingsValues(settings) {
+            updateZoomSettingsValue('zoomLevelsOffset', Math.abs(settings.zoomLevelOffset));
+            updateZoomSettingsValue('minZoom', settings.minZoom);
+            updateZoomSettingsValue('maxZoom', settings.maxZoom);
+        }
+
+        function retrieveZoomSettings() {
+            var settings = {};
+            settings.minZoom = parseInt(document.getElementById('minZoom').value);
+            settings.maxZoom = parseInt(document.getElementById('maxZoom').value);
+            settings.zoomLevelOffset = parseInt(document.getElementById('zoomLevelsOffset').value);
+            return settings;
+        }
+
+        function recreateMiniMap(settings) {
+            miniMapOptions.zoomLevelOffset = -settings.zoomLevelOffset;
+            miniMapOptions.mapOptions.minZoom = settings.minZoom;
+            miniMapOptions.mapOptions.maxZoom = settings.maxZoom;
+            if (miniMapControl.remove) {
+                miniMapControl.remove();
+            } else { //IE
+                miniMapControl.parentNode.removeChild(miniMapControl);
+            }
+
+            miniMapControl = tomtom.miniMap(miniMapOptions);
+            miniMapControl.addTo(map);
+            miniMapControl.on('map-zoomend', updateZoomLabels);
+            changeMiniMapBaseLayer();
+        }
+
+        function validateZoomControlSettings(settings) {
+            if (settings.minZoom > settings.maxZoom) {
+                settings.minZoom = settings.maxZoom;
+            }
+            return settings;
+        }
+
+        function handleZoomControlUpdate() {
+            var zoomControlSettings = retrieveZoomSettings();
+            zoomControlSettings = validateZoomControlSettings(zoomControlSettings);
+            recreateMiniMap(zoomControlSettings);
+            updateZoomSettingsValues(zoomControlSettings);
+            updateZoomSettingsLabels(zoomControlSettings);
+            updateZoomLabels();
+        }
+
+        function changeMiniMapBaseLayer() {
+            miniMapControl.setMapSource(document.getElementById('baseLayerSelect').value);
+        }
+
+        function updateMainMapBaseLayer() {
+            var selectedOption = document.getElementById('baseLayer').value || 'vector';
+
+            map.setMapSource(selectedOption);
+
+            if (selectedOption === 'vector') {
+                map.panBy([0, 1]);
+                map.panBy([0, -1]);
+                languageLabel.classList.remove('disabled');
+                languageSelector.disabled = false;
+            } else if (selectedOption === 'raster') {
+                languageLabel.classList.add('disabled');
+                languageSelector.disabled = true;
+            }
+        }
+
+        
+        map.on('zoomend', updateZoomLabels);
+        miniMapControl.on('map-zoomend', updateZoomLabels);
+        
+
+        document.getElementById('baseLayerSelect').onchange = changeMiniMapBaseLayer;
+        document.getElementById('baseLayer').onchange = updateMainMapBaseLayer;
+        document.getElementById('zoomLevelsOffset').onchange = handleZoomControlUpdate;
+        document.getElementById('minZoom').onchange = handleZoomControlUpdate;
+        document.getElementById('maxZoom').onchange = handleZoomControlUpdate;
+
+        
+        updateZoomLabels();
+        
+    </script>
+</body>
+</html>

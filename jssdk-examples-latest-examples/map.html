@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map initialization</title>
+    <meta name='viewport'
+          content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <script src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        tomtom.L.map('map', {
+            key: '${api.key}'
+        });
+        // Alternatively following constructions are available:
+        // tomtom.key('${api.key}');
+        // var map = L.map('map');
+        // var map = tomtom.map('map');
+        // var map = new tomtom.Map('map');
+        // var map = new L.Map('map');
+    </script>
+</body>
+</html>

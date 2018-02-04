@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        .input-container label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+
+        .input-container select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+    </div>
+    <script>
+        (function(tomtom, document) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            // Setting TomTom keys
+            tomtom.searchKey('${api.key.search}');
+
+            // Creating map
+            var map = tomtom.L.map('map', {
+                key: '${api.key}',
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+
+            var controlPanel = tomtom.controlPanel({
+                position: 'bottomright',
+                title: 'Settings',
+                collapsed: true
+            }).addTo(map);
+
+            var unitSelector = tomtom.unitSelector.getHtmlElement(tomtom.globalUnitService);
+            var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'search');
+
+            var unitRow = document.createElement('div');
+            var unitLabel = document.createElement('label');
+            unitLabel.innerHTML = 'Unit of measurement';
+            unitLabel.appendChild(unitSelector);
+            unitRow.appendChild(unitLabel);
+            unitRow.className = 'input-container';
+
+            var langRow = document.createElement('div');
+            var langLabel = document.createElement('label');
+            langLabel.innerHTML = 'Search language';
+            langLabel.appendChild(languageSelector);
+            langRow.appendChild(langLabel);
+            langRow.className = 'input-container';
+
+            controlPanel.addContent(unitRow);
+            controlPanel.addContent(langRow);
+
+            // Relocating zoom buttons
+            map.zoomControl.setPosition('bottomleft');
+
+            // Search input field
+            var searchBoxInstance = tomtom.searchBox({
+                position: 'topright',
+                language: 'en-GB', // optional
+                imperialDistance: unitSelector.value === 'imperial', // FALSE by default
+                serviceOptions: {unwrapBbox: true}
+            }).addTo(map);
+
+            // Marker layer to indicate the center of the search
+            var searchCenterLayer = tomtom.markersView()
+                .addTo(map);
+
+            // Marker layer to display the results over the map
+            var markersLayer = L.tomTomMarkersLayer().addTo(map);
+
+            // Draw markers for all the results found by the searchBox control (before user selects one)
+            searchBoxInstance.on(searchBoxInstance.Events.ResultsFound, function(results) {
+                drawSearchCenter();
+                markersLayer.setMarkersData(results.data)
+                    .addMarkers();
+            });
+
+            // Draw markers for all the results found by the searchBox control (before user selects one)
+            searchBoxInstance.on(searchBoxInstance.Events.ResultsCleared, function() {
+                markersLayer.clearLayers();
+            });
+
+            // Add a marker to indicate the position of the result selected by the user
+            searchBoxInstance.on(searchBoxInstance.Events.ResultClicked, function(result) {
+                markersLayer.setMarkersData([result.data])
+                    .addMarkers();
+
+                var viewport = result.data.viewport;
+                if (viewport) {
+                    map.fitBounds([viewport.topLeftPoint, viewport.btmRightPoint]);
+                } else {
+                    map.fitBounds(markersLayer.getBounds());
+                }
+            });
+
+            // Draw a marker at the center of the map
+            function drawSearchCenter() {
+                var currentLocation = map.getCenter();
+                var markerOptions = {
+                    title: 'Search Center\nLatitude: ' + currentLocation.lat + '\nLongitude: ' + currentLocation.lng,
+                    icon: tomtom.L.icon({
+                        iconUrl: 'img/center_marker.svg',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    })
+                };
+                searchCenterLayer.clearLayers();
+                searchCenterLayer.addLayer(
+                    tomtom.L.marker([currentLocation.lat, currentLocation.lng], markerOptions)
+                ).addTo(map);
+            }
+        })(tomtom, document);
+    </script>
+</body>
+
+</html>

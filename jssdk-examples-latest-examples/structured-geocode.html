@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <div id='tomtom-example-inputs' class='sidepanel'>
+            <h4>Structured geocode parameters</h4>
+            <form onsubmit='return false'>
+                <div id='tomtom-example-inputsWrapper'>
+                    <div id='langParam' class='sidepanel-input-group'>
+                        <label>Language</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='text' id='countryCode' name='countryCode' placeholder='2 or 3 letter country code' pattern='[a-zA-Z]{2,3}' title='this field is required and must be 2 or 3 characters long'
+                            required />
+                        <label for='countryCode'>Country code</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='text' id='streetName' name='streetName' placeholder='Street name' />
+                        <label for='streetName'>Street name</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='text' id='streetNumber' name='streetNumber' placeholder='Street number' pattern='[a-zA-Z0-9]+' />
+                        <label for='streetNumber'>Street number</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='text' id='municipality' name='municipality' placeholder='Municipality' />
+                        <label for='municipality'>Municipality</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='text' id='postalCode' name='postalCode' placeholder='Postal code' />
+                        <label for='postalCode'>Postal code</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='range' id='limit' name='limit' min='1' max='100' value='10' />
+                        <label id='limitAmount' for='limit'>Limit (10)</label>
+                    </div>
+                </div>
+                <input type='submit' id='tomtom-example-submit' value='Submit' />
+            </form>
+        </div>
+        <div id='map' class='flex-expand'></div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Setting TomTom keys
+        tomtom.searchKey('${api.key.search}');
+
+        // Creating map
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        var languageSelector = tomtom.languageSelector.getHtmlElement(new tomtom.localeService(), 'search');
+        var langParam = document.getElementById('langParam');
+        langParam.insertBefore(languageSelector, langParam.firstChild);
+
+        var resultsList = tomtom.resultsList()
+            .addTo(map);
+
+        var markersLayer = L.tomTomMarkersLayer().addTo(map);
+
+        var rangeElement = document.getElementById('limit');
+
+        rangeElement.onchange = function handleRangeUpdate() {
+            document.getElementById('limitAmount').innerHTML = 'Limit (' +
+                rangeElement.value + ')';
+        };
+
+        document.getElementById('tomtom-example-submit').onclick = function() {
+            clear();
+            tomtom.structuredGeocode(getOptions()).go(function(geoResponses) {
+                if (geoResponses.length > 0) {
+                    var markerOpt = {
+                        noMarkerClustering: true
+                    };
+
+                    var popupOpt = {
+                        popupContent: getResultAddress
+                    };
+
+                    markersLayer.setMarkersData(geoResponses)
+                        .setMarkerOptions(markerOpt)
+                        .setPopupOptions(popupOpt)
+                        .addMarkers();
+
+                    resultsList.clear().unfold();
+                    markersLayer.getMarkers().forEach(function(markerLayer, index) {
+                        var point = geoResponses[index];
+                        var geoResponseWrapper = tomtom.L.DomUtil.create('div', 'geoResponse-result');
+                        var geoResponseTitle = tomtom.L.DomUtil.create('div', 'geoResponse-result-address', geoResponseWrapper);
+                        var viewport = point.viewport;
+                        geoResponseTitle.innerHTML = getResultAddress(point);
+                        resultsList.addContent(geoResponseWrapper);
+                        geoResponseWrapper.onclick = function() {
+                            if (viewport) {
+                                map.fitBounds([viewport.topLeftPoint, viewport.btmRightPoint]);
+                            } else {
+                                map.panTo(markerLayer.getLatLng());
+                            }
+                            markerLayer.openPopup();
+                        };
+                    });
+
+                    map.fitBounds(markersLayer.getBounds());
+                } else {
+                    showFailure();
+                }
+            });
+        };
+
+        function showFailure() {
+            resultsList.setContent('Results not found.');
+        }
+
+        /*
+         * Gets entered options from form fields
+         */
+        function getOptions() {
+            var wrapper = document.getElementById('tomtom-example-inputsWrapper');
+            var inputs = wrapper.getElementsByTagName('input');
+            var options = { fail: showFailure };
+
+            for (var i = 0; i < inputs.length; i += 1) {
+                var input = inputs[i];
+                if (input.name && input.value && (input.type !== 'radio' || input.checked)) {
+                    options[input.name] = input.value;
+                }
+            }
+
+            var selectedLangCode = languageSelector.options[languageSelector.selectedIndex].value;
+
+            options.language = selectedLangCode;
+
+            return options;
+        }
+
+        /*
+         * Clears markers and structured geocode results.
+         */
+        function clear() {
+            resultsList.clear();
+            markersLayer.clearLayers();
+        }
+
+        /*
+         * Get result address from response
+         */
+        function getResultAddress(result) {
+            if (typeof result.address === 'undefined') {
+                return '';
+            }
+
+            var address = [];
+
+            if (typeof result.address.freeformAddress !== 'undefined') {
+                address.push(result.address.freeformAddress);
+            }
+
+            if (typeof result.address.countryCodeISO3 !== 'undefined') {
+                address.push(result.address.countryCodeISO3);
+            }
+
+            return address.join(', ');
+        }
+    </script>
+</body>
+
+</html>

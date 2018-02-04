@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Units conversion</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        .input-container label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+
+        .input-container select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+    </div>
+    <script>
+        (function(tomtom, document) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            // Initializing map
+            tomtom.routingKey('${api.key.routing}');
+            tomtom.searchKey('${api.key.search}');
+            var map = tomtom.L.map('map', {
+                key: '${api.key}',
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+            // Relocating zoom buttons
+            map.zoomControl.setPosition('topright');
+            var controlPanel = tomtom.controlPanel({
+                position: 'bottomright',
+                title: 'Settings',
+                collapsed: false
+            }).addTo(map);
+
+            var unitSelector = tomtom.unitSelector.getHtmlElement(tomtom.globalUnitService);
+            var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'routing');
+
+            var unitRow = document.createElement('div');
+            var unitLabel = document.createElement('label');
+            unitLabel.innerHTML = 'Unit of measurement';
+            unitLabel.appendChild(unitSelector);
+            unitRow.appendChild(unitLabel);
+            unitRow.className = 'input-container';
+
+            var langRow = document.createElement('div');
+            var langLabel = document.createElement('label');
+            langLabel.innerHTML = 'Routing language';
+            langLabel.appendChild(languageSelector);
+            langRow.appendChild(langLabel);
+            langRow.className = 'input-container';
+
+            controlPanel.addContent(unitRow);
+            controlPanel.addContent(langRow);
+
+            // Creating routeOnMap service
+            var routeOnMapView = tomtom.routeOnMap({
+                serviceOptions: {
+                    instructionsType: 'tagged'
+                }
+            }).addTo(map);
+
+            // Creating routeInstructions widget
+            var routeInstructionsInstance = tomtom.routeInstructions({
+                instructionGroupsCollapsed: false,
+                imperialDistance: unitSelector.value === 'imperial',
+                size: [240, 290]
+            }).addTo(map);
+
+            // Pass the instructions to the routeInstructions widget when were available
+            routeOnMapView.on(routeOnMapView.Events.RouteChanged, function(eventObject) {
+                routeInstructionsInstance.updateGuidanceData(eventObject.instructions);
+            });
+
+            // Declaring the initial route
+            routeOnMapView.draw([
+                { lat: 53.01533, lng: 18.6057 }, // route start
+                { lat: 51.75905, lng: 19.4586 } // route end
+            ]);
+
+            languageSelector.addEventListener('change', function(evt) {
+                routeOnMapView.options.serviceOptions.language = evt.target.value;
+                routeOnMapView.draw([
+                    { lat: 53.01533, lng: 18.6057 }, // route start
+                    { lat: 51.75905, lng: 19.4586 } // route end
+                ]);
+            });
+
+        })(tomtom, document);
+    </script>
+</body>
+
+</html>

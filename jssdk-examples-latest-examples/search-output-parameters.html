@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom1.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom3.css'>
+    <script type='text/javascript' src='js/vendor/requirejs/require.js'></script>
+    <script type='text/javascript' src='config.js'></script>
+    <link rel='stylesheet' type='text/css' href='js/vendor/leaflet-draw/dist/leaflet.draw.css'>
+    <style type='text/css'>
+        pre.search-result-details{
+            height: 250px;
+        }
+        #example {
+            min-height: 800px;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            display: inline-block;
+        }
+
+        .json-tree-root {
+            padding-left: 15px;
+        }
+
+        .geoResponse-result div:first-child,
+        .geoResponse-result-distance {
+            font-weight: 700;
+        }
+
+    </style>
+</head>
+
+<body class='use-all-space'>
+<div class='flex-horizontal use-all-space'>
+    <div id='tomtom-example-inputs' class='sidepanel use-all-space'>
+        <h4>Search parameters</h4>
+        <form id='example-form'>
+            <div id='tomtom-example-inputsWrapper' class='scrollbar'>
+                <div id='langParam' class='sidepanel-input-group'>
+                    <label>Language</label>
+                </div>
+                <div id='tomtom-example-checkboxes' class='sidepanel-input-group'>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='POI' checked
+                                                         id='example-checkbox-POI'>POI</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='PAD' checked
+                                                         id='example-checkbox-PAD'>Point Addresses</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Str' checked
+                                                         id='example-checkbox-Str'>Streets</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Xstr' checked
+                                                         id='example-checkbox-Xstr'>Cross Streets
+                        (intersections)</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Geo' checked
+                                                         id='example-checkbox-Geo'>Geographies</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Addr' checked
+                                                         id='example-checkbox-Addr'>Address range interpolation</label>
+                    <h4>Set of search indices</h4>
+                </div>
+                <div id='tomtom-example-postcode-checkboxes' class='sidepanel-input-group'>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='POI' checked
+                                                         id='postcode-example-checkbox-POI'>POI</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='PAD' checked
+                                                         id='postcode-example-checkbox-PAD'>Point Addresses</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Str' checked
+                                                         id='postcode-example-checkbox-Str'>Streets</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Xstr' checked
+                                                         id='postcode-example-checkbox-Xstr'>Cross Streets
+                        (intersections)</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Geo'
+                                                         id='postcode-example-checkbox-Geo'>Geographies</label>
+                    <label class='checkbox-label'><input type='checkbox' class='example-checkbox' value='Addr' checked
+                                                         id='postcode-example-checkbox-Addr'>Address range interpolation</label>
+                    <h4>Extended Postal Codes For</h4>
+                </div>
+                <div id='queryParam' class='sidepanel-input-group'>
+                    <input type='text' id='query' name='query' placeholder='Search for (e.g. pizza)...' pattern='.+'
+                           title='this field is required'
+                           required>
+                    <label for='query'>Query</label>
+                </div>
+                <div class='sidepanel-input-group'>
+                    <input type='text' id='countrySet' name='countrySet'
+                           placeholder='Comma separated list of country codes (2-3 letters)'
+                           pattern='([a-zA-Z]{2,3})(,[a-zA-Z]{2,3})*'
+                           title='Required, expects comma separated list, e.g.: PL,DE'/>
+                    <label for='countrySet'>Country code(s)</label>
+                </div>
+                <div class='sidepanel-input-group'>
+                    <label class='checkbox-label'>
+                        <input type='checkbox' id='geoBias' name='geoBias' checked/><span id="geoBiasStatus">On</span>
+                    </label>
+                    <label for='geoBias'>Geo Bias</label>
+                </div>
+            </div>
+            <input type='submit' id='tomtom-example-submit' value='Submit'/>
+        </form>
+    </div>
+    <div id='map' class='flex-expand'></div>
+</div>
+</body>
+<script>
+    require(['tomtom.min', 'leafletdraw'], function(tomtom) {
+        
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Set keys and create a map
+        tomtom.searchKey('${api.key.search}');
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        }).setView([51.49912573429843, -0.12582778930664062], 6);
+        
+
+        var languageSelector = tomtom.languageSelector.getHtmlElement(new tomtom.localeService(), 'search');
+        var langParam = document.getElementById('langParam');
+        langParam.insertBefore(languageSelector, langParam.firstChild);
+
+        
+        // We will show results here
+        var resultsList = tomtom.resultsList()
+            .addTo(map);
+        
+
+        var shapes = new L.FeatureGroup();
+        
+        // Get form from HTML and add submit handler
+        var form = document.getElementById('example-form');
+        
+
+        var markersLayer = L.tomTomMarkersLayer();
+        map.addControl(drawToolbar());
+        map.on('draw:drawstart', function() {
+            shapes.clearLayers();
+        });
+        map.on('draw:created', function(e) {
+            shapes.addLayer(e.layer);
+        });
+
+        document.getElementById('geoBias').addEventListener('change', function(event) {
+            var checkbox = event.currentTarget;
+            var checkboxStatus = 'Off';
+            if (checkbox.checked) {
+                checkboxStatus = 'On';
+            }
+            document.getElementById('geoBiasStatus').innerText = checkboxStatus;
+        });
+
+        
+        form.onsubmit = function() {
+            clear();
+            var searchCall = prepareServiceCall();
+            if (!searchCall) {
+                return true;
+            }
+            searchCall.go(function(geoResponses) {
+                if (geoResponses && geoResponses.length > 0) {
+                    draw(geoResponses);
+                    map.fitBounds(markersLayer.getBounds());
+                } else {
+                    resultsList.setContent('Results not found.');
+                }
+            }, function fail(err) {
+                err = JSON.parse(err);
+                resultsList.setContent(err.errorText);
+            });
+            return false;
+        };
+
+        // API call helper
+        function prepareServiceCall() {
+            var selectedLangCode = languageSelector.options[languageSelector.selectedIndex].value;
+            var queryValue = document.getElementById('query').value;
+            var countrySet = document.getElementById('countrySet').value;
+            var geoBiasEnabled = document.getElementById('geoBias').checked;
+            var idxSet = getIdxSet();
+            var extendedPostcodesSet = getExtendedPostcodesSet();
+            var call = tomtom
+                .fuzzySearch()
+                .unwrapBbox(true)
+                .query(queryValue)
+                .language(selectedLangCode);
+
+            if (hasBoundingBox()) {
+                call.boundingBox(getBoundingBox());
+            } else if (geoBiasEnabled) {
+                call.center(map.getCenter());
+            }
+
+            if (countrySet) {
+                call = call.countrySet(countrySet);
+            }
+
+            if (idxSet) {
+                call = call.idxSet(idxSet);
+            }
+
+            if (extendedPostcodesSet) {
+                call = call.extendedPostalCodesFor(extendedPostcodesSet);
+            }
+
+            return call.limit(10);
+        }
+        
+
+        function getIdxSet() {
+            var checkboxesContainer = document.getElementById('tomtom-example-checkboxes');
+            var checkboxes = checkboxesContainer.getElementsByClassName('example-checkbox');
+            var result = [];
+            for (var i = 0; i < checkboxes.length; ++i) {
+                if (checkboxes[i].checked) {
+                    result.push(checkboxes[i].value);
+                }
+            }
+            return result.join(',');
+        }
+
+        function getExtendedPostcodesSet() {
+            var checkboxesContainer = document.getElementById('tomtom-example-postcode-checkboxes');
+            var checkboxes = checkboxesContainer.getElementsByClassName('example-checkbox');
+            var result = [];
+            for (var i = 0; i < checkboxes.length; ++i) {
+                if (checkboxes[i].checked) {
+                    result.push(checkboxes[i].value);
+                }
+            }
+            return result.join(',');
+        }
+
+        /**
+         * Draws toolbar, so you can support drawing rectangles as bounding box for your searches
+         */
+        function drawToolbar() {
+            var toolbar = new L.Control.Draw({
+                draw: {
+                    polygon: false,
+                    circle: false,
+                    rectangle: true,
+                    marker: false,
+                    polyline: false,
+                    circlemarker: false
+                },
+                edit: {
+                    featureGroup: shapes,
+                    remove: false
+                }
+            });
+            map.addLayer(shapes);
+            return toolbar;
+        }
+
+        /**
+         * Checks if user has drawn rectangle on the map to narrow search area.
+         */
+        function hasBoundingBox() {
+            var shape = shapes.getLayers()[0];
+            return typeof shape !== 'undefined';
+        }
+
+        /**
+         * Gets bounding box of user's drawn rectangle area.
+         */
+        function getBoundingBox() {
+            var shape = shapes.getLayers()[0];
+            if (typeof shape === 'undefined') {
+                return null;
+            } else {
+                var bounds = shape.getBounds();
+                var sw = bounds.getSouthWest();
+                var ne = bounds.getNorthEast();
+                var result = [sw.lat + ',' + sw.lng, ne.lat + ',' + ne.lng];
+                return result;
+            }
+        }
+
+        /**
+         * Get result name from response
+         */
+        function getResultName(result) {
+            if (typeof result.poi !== 'undefined' && typeof result.poi.name !== 'undefined') {
+                return result.poi.name;
+            }
+
+            if (result.nm !== '') {
+                return result.nm;
+            }
+            return '';
+        }
+
+        /**
+         * Get result address from response
+         */
+        function getResultAddress(result) {
+            if (typeof result.address !== 'undefined') {
+                var address = [];
+
+                if (typeof result.address.freeformAddress !== 'undefined') {
+                    address.push(result.address.freeformAddress);
+                }
+
+                if (typeof result.address.countryCodeISO3 !== 'undefined') {
+                    address.push(result.address.countryCodeISO3);
+                }
+
+                return address.join(', ');
+            } else if (typeof result.a2 !== 'undefined') {
+                return result.a2;
+            }
+            return '';
+        }
+
+        /**
+         * Get result distance from search center
+         */
+        function getResultDistance(result) {
+            if (typeof result.dist !== 'undefined') {
+                return result.dist;
+            } else if (typeof result.ps !== 'undefined') {
+                return getDistance(result.ps.split(' '));
+            }
+            return '';
+        }
+
+        /**
+         * Prepare result element for popup and result list
+         */
+        function preparePopupElement(result) {
+            var resultElement = new tomtom.L.DomUtil.create('div', '');
+            var tree = createTreeJSON(result);
+            var jsonElem = tomtom.L.DomUtil.create('pre', 'search-result-details');
+            jsonElem.appendChild(tree);
+            resultElement.appendChild(jsonElem);
+            return resultElement;
+        }
+
+        function prepareResultElement(result) {
+            var resultElement = new tomtom.L.DomUtil.create('div', 'geoResponse-result');
+            var name = getResultName(result);
+            var adress = getResultAddress(result);
+            var distance = getResultDistance(result);
+
+            if (typeof name !== 'undefined') {
+                var nameWrapper = tomtom.L.DomUtil.create('div', 'geoResponse-result-name');
+                nameWrapper.innerHTML = name;
+                resultElement.appendChild(nameWrapper);
+            }
+
+            if (typeof adress !== 'undefined') {
+                var addressWrapper = tomtom.L.DomUtil.create('div', 'geoResponse-result-address');
+                addressWrapper.innerHTML = adress;
+                resultElement.appendChild(addressWrapper);
+            }
+
+            if (typeof distance !== 'undefined') {
+                var distanceElement = tomtom.L.DomUtil.create('div', 'geoResponse-result-distance');
+                distanceElement.innerHTML = tomtom.unitFormatConverter.formatDistance(distance);
+                resultElement.appendChild(distanceElement);
+            }
+
+            return resultElement;
+        }
+
+        /**
+         * Calculate distance between map center and point
+         */
+        function getDistance(point) {
+            var currentLocation = map.getCenter();
+            var mapCenterPoint = tomtom.L.latLng([currentLocation.lat, currentLocation.lng]);
+            return mapCenterPoint.distanceTo(point);
+        }
+
+        
+        // Draws markers on a map (based on the search results from the service).
+        function draw(searchResponses) {
+
+            var markerOpt = {
+                noMarkerClustering: true
+            };
+
+            var popupOpt = {
+                popupHoverContent: getResultName,
+                popupContent: preparePopupElement
+            };
+
+            markersLayer.setMarkersData(searchResponses)
+                .setMarkerOptions(markerOpt)
+                .setPopupOptions(popupOpt)
+                .addMarkers()
+                .addTo(map);
+
+            resultsList.clear().unfold();
+            markersLayer.getMarkers().forEach(function(markerLayer, index) {
+                var point = searchResponses[index];
+                var geoResponseWrapper = prepareResultElement(point);
+                var viewport = point.viewport;
+                resultsList.addContent(geoResponseWrapper);
+                geoResponseWrapper.onclick = function() {
+                    if (viewport) {
+                        map.fitBounds([viewport.topLeftPoint, viewport.btmRightPoint]);
+                    } else {
+                        map.panTo(markerLayer.getLatLng());
+                    }
+                    markerLayer.openPopup();
+                };
+            });
+        }
+        
+
+        /**
+         * Clears markers and search results.
+         */
+        function clear() {
+            resultsList.clear();
+            map.removeLayer(markersLayer);
+            markersLayer.clearLayers();
+        }
+
+        /**
+         * Code below is used to generate tree out of JSON
+         */
+        function isObject(val) {
+            return Object.prototype.toString.call(val) === '[object Object]';
+        }
+
+        function isArray(val) {
+            return Object.prototype.toString.call(val) === '[object Array]';
+        }
+
+        function recursion(data, propName, callback, elem) {
+            if (isObject(data)) {
+                elem = callback(data, 'object', propName, elem);
+                for (var prop in data) {
+                    recursion(data[prop], prop, callback, elem);
+                }
+            } else if (isArray(data)) {
+                elem = callback(data, 'array', propName, elem);
+                for (var i = 0; i < data.length; ++i) {
+                    recursion(data[i], i, callback, elem);
+                }
+            } else {
+                callback(data, 'property', propName, elem);
+            }
+        }
+
+        function createTreeJSON(data) {
+            var tree = document.createElement('div');
+
+            iterate(data, function(d, type, propName, elem) {
+                var l, u, text;
+                if (type === 'object') {
+                    l = li(propName);
+                    u = ul();
+                    l.appendChild(u);
+                    elem.appendChild(l);
+                    elem = u;
+                } else if (type === 'array') {
+                    l = li(propName);
+                    u = ul();
+                    l.appendChild(u);
+                    elem.appendChild(l);
+                    elem = u;
+                } else {
+                    text = propName !== undefined ? propName + ': ' + d : d;
+                    l = li(text);
+                    elem.appendChild(l);
+                }
+                return elem;
+            }, tree);
+            return tree;
+        }
+
+        function iterate(data, callback, tree) {
+            var root = ul();
+            root.className = 'json-tree-root';
+            tree.appendChild(root);
+            for (var prop in data) {
+                recursion(data[prop], prop, callback, root);
+            }
+        }
+
+        function ul(content) {
+            var ul = document.createElement('ul');
+            if (content !== undefined) {
+                var bold = document.createElement('b');
+                var textNode = document.createTextNode(content);
+                bold.appendChild(textNode);
+                ul.appendChild(bold);
+            }
+            ul.style.paddingLeft = '10px';
+            return ul;
+        }
+
+        function li(content) {
+            var li = document.createElement('li');
+            if (content !== undefined) {
+                var span = document.createElement('span');
+                var c = document.createTextNode(content);
+                span.appendChild(c);
+                li.appendChild(span);
+            }
+            return li;
+        }
+    });
+</script>
+
+</html>

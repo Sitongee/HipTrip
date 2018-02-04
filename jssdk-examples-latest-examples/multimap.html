@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Multiple maps on single page</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label.disabled,
+        label.warning {
+            opacity: 0.5;
+        }
+        label.disabled ~ label.warning {
+            display: flex;
+            font-size: xx-small;
+            justify-content: center;
+        }
+        .warning {
+            display: none;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <div class='map-container flex-expand'>
+            <div id='first-map' class='use-all-space absolute'></div>
+            <div>
+                <label for='baseLayer1'>
+                    Base Layer
+                    <select id='baseLayer1' name='baseLayer1' autocomplete='off'>
+                    </select>
+                </label>
+            </div>
+        </div>
+        <div class='map-container flex-expand'>
+            <div id='second-map' class='use-all-space absolute'></div>
+            <div>
+                <label for='baseLayer2'>
+                    Base Layer
+                    <select id='baseLayer2' name='baseLayer2' autocomplete='off'>
+                    </select>
+                </label>
+            </div>
+        </div>
+    </div>
+    <script>
+        
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Initialize first map
+        var firstMap = tomtom.map('first-map', {
+            key: '${api.key}',
+            source: ['raster', 'vector'],
+            basePath: '${base.path}'
+        });
+        firstMap.fitBounds([[-34, 17], [-15, 27]]);
+        tomtom.L.marker([-17.924444, 25.856667]).addTo(firstMap);
+        tomtom.L.marker([-19.130979, 23.623112]).addTo(firstMap);
+        tomtom.L.marker([-33.957314, 18.403108]).addTo(firstMap);
+        
+
+        var languageLabel = L.DomUtil.create('label');
+        languageLabel.innerHTML = 'Maps language';
+        var languageSelectorFirst = tomtom.languageSelector.getHtmlElement(firstMap.getLocaleService(), 'maps');
+        languageLabel.appendChild(languageSelectorFirst);
+        languageSelectorFirst.disabled = true;
+        languageSelectorFirst.parentElement.classList.add('disabled');
+        var languageWarningFirst = L.DomUtil.create('label', 'warning');
+        languageWarningFirst.innerHTML = 'Language selection is only possible for vector map tiles.';
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true,
+            closeOnMapClick: false
+        })
+            .addTo(firstMap)
+            .addContent(languageLabel)
+            .addContent(languageWarningFirst);
+
+        tomtom.controlPanel({
+            position: 'topright',
+            title: null,
+            collapsed: false,
+            closeOnMapClick: false,
+            show: null,
+            close: null
+        })
+            .addTo(firstMap)
+            .addContent(document.getElementById('first-map').nextElementSibling);
+
+        
+        // Initialize second map
+        var secondMap = tomtom.map('second-map', {
+            key: '${api.key}',
+            style: 'night',
+            source: ['vector', 'raster'],
+            basePath: '${base.path}'
+        });
+        secondMap.setView([52.379189, 4.899431], 12);
+        
+
+        languageLabel = L.DomUtil.create('label');
+        languageLabel.innerHTML = 'Maps language';
+        var languageSelectorSecond = tomtom.languageSelector.getHtmlElement(secondMap.getLocaleService(), 'maps');
+        languageLabel.appendChild(languageSelectorSecond);
+        var languageWarningSecond = L.DomUtil.create('label', 'warning');
+        languageWarningSecond.innerHTML = 'Language selection is only possible for vector map tiles.';
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true,
+            closeOnMapClick: false
+        })
+            .addTo(secondMap)
+            .addContent(languageLabel)
+            .addContent(languageWarningSecond);
+
+        tomtom.controlPanel({
+            position: 'topright',
+            title: null,
+            collapsed: false,
+            closeOnMapClick: false,
+            show: null,
+            close: null
+        })
+            .addTo(secondMap)
+            .addContent(document.getElementById('second-map').nextElementSibling);
+
+        function updateBaseLayer(map, languageSelector, selectorId) {
+            return function() {
+                var selectedOption = document.getElementById(selectorId).value;
+                var baseLayers = map.getBaseLayers();
+
+                if (selectedOption === 'raster') {
+                    map.addLayer(baseLayers.raster);
+                    map.removeLayer(baseLayers.vector);
+                    languageSelector.parentElement.classList.add('disabled');
+                    languageSelector.disabled = true;
+                } else if (selectedOption === 'vector') {
+                    map.addLayer(baseLayers.vector);
+                    map.removeLayer(baseLayers.raster);
+                    languageSelector.parentElement.classList.remove('disabled');
+                    languageSelector.disabled = false;
+                }
+            };
+        }
+
+        document.getElementById('baseLayer1').onchange = updateBaseLayer(firstMap, languageSelectorFirst, 'baseLayer1');
+        document.getElementById('baseLayer2').onchange = updateBaseLayer(secondMap, languageSelectorSecond, 'baseLayer2');
+        (function initializeTileSwitcher(params) {
+            function newOption(value, label, selected) {
+                var option = document.createElement('option');
+                option.value = value;
+                option.text = label;
+                if (selected) {
+                    option.selected = 'selected';
+                }
+                return option;
+            }
+
+            params.forEach(function(param) {
+                var select = document.getElementById(param.selectId);
+                var layers = param.map.getBaseLayers();
+                layers.raster && select.appendChild(newOption('raster', 'Raster', param.selected === 'raster'));
+                layers.vector && select.appendChild(newOption('vector', 'Vector', param.selected === 'vector'));
+            });
+        })([
+            { selectId: 'baseLayer1', map: firstMap, selected: 'raster' },
+            { selectId: 'baseLayer2', map: secondMap, selected: 'vector' }
+        ]);
+    </script>
+</body>
+</html>

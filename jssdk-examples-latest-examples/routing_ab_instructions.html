@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing instructions support</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var instructionMarker, groupMarkersLayer;
+        // Setting TomTom keys
+        tomtom.routingKey('${api.key.routing}');
+        tomtom.searchKey('${api.key.search}');
+
+        // Creating map
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+        map.zoomControl.setPosition('topright');
+        var routingLocaleService = new tomtom.localeService();
+        var unitSelector = tomtom.unitSelector.getHtmlElement(tomtom.globalUnitService);
+        var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'search');
+        var routingLanguageSelector = tomtom.languageSelector.getHtmlElement(routingLocaleService, 'routing');
+
+        var unitRow = document.createElement('div');
+        var unitLabel = document.createElement('label');
+        unitLabel.innerHTML = 'Unit of measurement';
+        unitLabel.appendChild(unitSelector);
+        unitRow.appendChild(unitLabel);
+        unitRow.className = 'input-container';
+
+        var langRow = document.createElement('div');
+        var langLabel = document.createElement('label');
+        langLabel.innerHTML = 'Search language';
+        langLabel.appendChild(languageSelector);
+        langRow.appendChild(langLabel);
+        langRow.className = 'input-container';
+
+        var routingRow = document.createElement('div');
+        var routingLabel = document.createElement('label');
+        routingLabel.innerHTML = 'Routing language';
+        routingLabel.appendChild(routingLanguageSelector);
+        routingRow.appendChild(routingLabel);
+        routingRow.className = 'input-container';
+
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true
+        })
+            .addTo(map)
+            .addContent(unitRow)
+            .addContent(routingRow)
+            .addContent(langRow);
+
+        // Adding route-inputs widget
+        var routeInputsInstance = tomtom.routeInputs().addTo(map);
+
+        // Adding route-on-map widget
+        var routeOnMapView = tomtom.routeOnMap({
+            generalMarker: {
+                draggable: true,
+                zIndexOffset: 10
+            },
+            serviceOptions: {
+                instructionsType: 'tagged'
+            }
+        }).addTo(map);
+
+        // Adding route-instructions widget
+        var routeInstructionsInstance = tomtom.routeInstructions({
+            size: [240, 230],
+            position: 'topleft',
+            instructionGroupsCollapsed: true
+        }).addTo(map);
+
+        var lastEventObject;
+        // Connecting route-inputs with route-on-map widget
+        routeInputsInstance.on(routeInputsInstance.Events.LocationsFound, function(eventObject) {
+            lastEventObject = eventObject;
+            routeOnMapView.draw(eventObject.points);
+        });
+        routeInputsInstance.on(routeInputsInstance.Events.LocationsCleared, function(eventObject) {
+            lastEventObject = eventObject;
+            routeInstructionsInstance.hide();
+            routeOnMapView.draw(eventObject.points);
+        });
+
+        // Connecting route-on-map with route-instructions widget
+        routeOnMapView.on(routeOnMapView.Events.RouteChanged, function(eventObject) {
+            routeInstructionsInstance.updateGuidanceData(eventObject.instructions);
+        });
+
+        // Update search inputs when the user change the route dragging the markers over the map
+        routeOnMapView.on(routeOnMapView.Events.MarkerDragEnd, function(eventObject) {
+            var location = eventObject.markerIndex === 0 ? routeInputsInstance.searchBoxes[0] :
+                routeInputsInstance.searchBoxes.slice(-1)[0];
+            location.setResultData(eventObject.object);
+        });
+
+        // Focus a instruction step in the map when the use select it on the route-instructions widget
+        routeInstructionsInstance.on(routeInstructionsInstance.Events.InstructionClickedSelect, function(eventObject) {
+            map.setView({lat: eventObject.point.latitude, lon: eventObject.point.longitude}, 14);
+        });
+
+        // Focus a instructions group in the map when the use select it on the route-instructions widget
+        routeInstructionsInstance.on(routeInstructionsInstance.Events.InstructionGroupClickedExpand, function(eventObject) {
+            zoomToPoints(eventObject.points);
+        });
+        routeInstructionsInstance.on(routeInstructionsInstance.Events.InstructionGroupClickedCollapse, function(eventObject) {
+            zoomToPoints(eventObject.points);
+        });
+
+        // Show popups over the points in the map when the use move the cursor over the instruction steps
+        routeInstructionsInstance.on(routeInstructionsInstance.Events.InstructionHoverOn, function(eventObject) {
+            var position = {
+                lat: eventObject.point.latitude,
+                lon: eventObject.point.longitude
+            };
+            instructionMarker = tomtom.L.marker(position, {
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/instruction_marker.svg',
+                    iconSize: tomtom.L.Browser.retina ? [34, 34] : [20, 20],
+                    iconAnchor: tomtom.L.Browser.retina ? [17, 17] : [10, 10]
+                }),
+                zIndexOffset: 100
+            });
+            map.addLayer(instructionMarker);
+            tomtom.L.popup({autoPan: false, maxWidth: 150}).setLatLng(position)
+                .setContent(eventObject.message.toString()).openOn(map);
+        });
+        routeInstructionsInstance.on(routeInstructionsInstance.Events.InstructionHoverOff, function() {
+            map.removeLayer(instructionMarker);
+            instructionMarker = undefined;
+            map.closePopup();
+        });
+
+        // Hightlight all the steps of a group in the map when the use move the cursor over an instructions group
+        routeInstructionsInstance.on(routeInstructionsInstance.Events.InstructionGroupHoverOn, function(eventObject) {
+            var markersForGroup = eventObject.points.map(function(instruction) {
+                return tomtom.L.marker({
+                    lat: instruction.latitude,
+                    lon: instruction.longitude
+                }, {
+                    icon: tomtom.L.icon({
+                        iconUrl: 'img/instruction_marker.svg',
+                        iconSize: tomtom.L.Browser.retina ? [25, 25] : [15, 15],
+                        iconAnchor: tomtom.L.Browser.retina ? [13, 13] : [7, 7]
+                    }),
+                    zIndexOffset: 100
+                });
+            });
+            groupMarkersLayer = tomtom.L.layerGroup(markersForGroup);
+            map.addLayer(groupMarkersLayer);
+        });
+        routeInstructionsInstance.on(routeInstructionsInstance.Events.InstructionGroupHoverOff, function() {
+            map.removeLayer(groupMarkersLayer);
+        });
+
+        function zoomToPoints(points) {
+            var latLons = points.map(function(point) {
+                return tomtom.L.latLng(point.latitude, point.longitude);
+            });
+            map.fitBounds(tomtom.L.latLngBounds(latLons));
+        }
+
+        routingLocaleService.on(L.LocaleService.Events.LOCALE_CHANGED, function(evt) {
+            var langCode = evt.getLanguageCode();
+            routeOnMapView.options.serviceOptions.language = langCode;
+            if (lastEventObject) {
+                routeOnMapView.draw(lastEventObject.points);
+            }
+        });
+
+    </script>
+</body>
+</html>

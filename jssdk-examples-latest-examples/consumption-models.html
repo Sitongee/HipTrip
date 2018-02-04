@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing consumption model</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' href='js/vendor/font-awesome/css/font-awesome.min.css'>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<style>
+
+    .leaflet-control-routeInputs {
+        display: inline-block;
+        float: none;
+        margin-top: -1px !important;
+    }
+
+    .error-foldable {
+        max-width: 300px;
+    }
+
+    .tomtom-foldable__content-body {
+        -ms-overflow-y: hidden;
+    }
+
+    .parameter-sidepanel {
+        width: 200px !important;
+        overflow-x: hidden;
+    }
+
+    .parameter-header {
+        font-size:13px;
+        color: #000000;
+        font-weight: bolder;
+        margin-top:10px;
+        text-align: center;
+    }
+
+    .table-input-column {
+        height: 20px !important;
+        margin:0 auto !important;
+        padding:0px !important;
+        border:1px solid #ccc !important;
+        border-radius:4px !important;
+        line-height: 0px !important;
+        display: block;
+        text-align: center;
+        width: 40px !important;
+    }
+    .table-remove-column {
+        width: 40px;
+    }
+
+    th {
+        width: 40%;
+        text-align: center;
+        font-size:10px;
+    }
+
+    .sidepanel {
+        min-width: 0px;
+        width: 300px;
+    }
+
+    tr {
+        height: 30px;
+    }
+
+    table {
+        border:none;
+        border-collapse: collapse;
+    }
+
+    table td {
+        text-align: center;
+        border-left: 1px solid #000;
+        border-right: 1px solid #000;
+    }
+
+    table td:first-child {
+        border-left: none;
+    }
+
+    table td:last-child {
+        border-right: none;
+    }
+
+    .sidepanel input[type=button].add-button {
+        height: 30px !important;
+    }
+    /* Style the tab */
+    div.tab {
+        overflow: hidden;
+        border: 1px solid #ccc;
+        background-color: #f1f1f1;
+    }
+
+    /* Style the buttons inside the tab */
+    div.tab button {
+        background-color: inherit;
+        float: left;
+        border: none;
+        outline: none;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+
+    /* Change background color of buttons on hover */
+    div.tab button:hover {
+        background-color: #ddd;
+    }
+
+    /* Create an active/current tablink class */
+    div.tab button.active {
+        background-color: #ccc;
+    }
+
+    /* Style the tab content */
+    .tabcontent {
+        display: none;
+        padding: 6px 12px;
+        border: 1px solid #ccc;
+        border-top: none;
+    }
+
+    .tablinks {
+        width:50%;
+    }
+
+</style>
+<body class='use-all-space'>
+    <div class='sidepanel parameter-sidepanel' id='params'>
+        <div class='tab'>
+            <button id='combustionTab' class='tablinks active' onclick='openTab(event, "combustion")'>Combustion</button>
+            <button id='electricTab' class='tablinks' onclick='openTab(event, "electric")'>Electric</button>
+        </div>
+        <div class='parameter-header'>Speed consumption pairs</div>
+        <div class='sidepanel-input-group'>
+            <table id='speedConsumptionPairs' class='use-all-space'>
+                <thead>
+                    <th style='font-weight: bolder;'>Speed </br><span>(km/h)</span></th>
+                    <th style='font-weight: bolder;'>Consumption </br><span id="consumptionUnit">(l)</span></th>
+                    <th></th>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type='text' class='table-input-column' value='50'></td>
+                        <td><input type='text' class='table-input-column' value='6.3'></td>
+                        <td class='table-remove-column'><button class='fa fa-trash' onclick='removeRow(event)'></button></td>
+                    </tr>
+                </tbody>
+            </table>
+            <input id='addRowButton' class="add-button" type="button" value="Add row"/>
+
+        </div>
+        <div id='parametersText' class='parameter-header'></div>
+        <div class='sidepanel-input-group'>
+            <input type='text'  id='vehicleWeight' value='1600'>
+            <label for='vehicleWeight'>Vehicle weight (kg)</label>
+        </div>
+
+        <div id='combustionParameters'>
+            <div class='sidepanel-input-group'>
+                <input type='text'  id='currentFuelInLiters' value='55'>
+                <label for='currentFuelInLiters' title="Current fuel in liters">Current fuel (l)</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='text'  id='auxiliaryPowerInLitersPerHour' value='0.2'>
+                <label for='auxiliaryPowerInLitersPerHour' title='Auxiliary power in liters per hour'>Auxiliary power (l/h)</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='text'  id='fuelEnergyDensityInMJoulesPerLiter' value='34.2'>
+                <label for='fuelEnergyDensityInMJoulesPerLiter' title='Fuel energy density in MJoules per liter'>Fuel energy (MJ/l)</label>
+            </div>
+        </div>
+        <div id='electricParameters'>
+            <div class='sidepanel-input-group'>
+                <input type='text'  id='currentChargeInkWh' value='43'>
+                <label for='currentChargeInkWh' title="Current charge in kilowatt hours">Current charge (kWh)</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='text'  id='maxChargeInkWh' value='85'>
+                <label for='maxChargeInkWh' title="Max charge in kilowatt hours">Max charge (kWh)</label>
+            </div>
+            <div class='sidepanel-input-group'>
+                <input type='text'  id='auxiliaryPowerInkW' value='1.7'>
+                <label for='auxiliaryPowerInkW' title="Auxiliary power in kilowatts">Auxiliary power (kW)</label>
+            </div>
+        </div>
+        <div class='sidepanel-input-group'>
+            <input type='text'  id='accelerationEfficiency' value='0.33'>
+            <label for='accelerationEfficiency'>Acceleration efficiency</label>
+        </div>
+        <div class='sidepanel-input-group'>
+            <input type='text'  id='decelerationEfficiency' value='0.33'>
+            <label for='decelerationEfficiency'>Deceleration efficiency</label>
+        </div>
+        <div class='sidepanel-input-group'>
+            <input type='text'  id='uphillEfficiency' value='0.33'>
+            <label for='uphillEfficiency'>Uphill efficiency</label>
+        </div>
+        <div class='sidepanel-input-group'>
+            <input type='text'  id='downhillEfficiency' value='0.33'>
+            <label for='downhillEfficiency'>Downhill efficiency</label>
+        </div>
+
+    </div>
+    <div id='loader' class='loader loader-center'></div>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var routePoints, currentlySetTab, currentRoute, startMarker, endMarker;
+        
+        // Set TomTom keys
+        tomtom.key('${api.key}');
+        tomtom.routingKey('${api.key.routing}');
+        tomtom.searchKey('${api.key.search}');
+        
+        var combustionParameters = document.getElementById('combustionParameters');
+        var electricParameters = document.getElementById('electricParameters');
+        var electricTab = document.getElementById('electricTab');
+        var combustionTab = document.getElementById('combustionTab');
+        var speedConsumptionPairsTable = document.getElementById('speedConsumptionPairs');
+        var parametersText = document.getElementById('parametersText');
+        var consumptionUnit = document.getElementById('consumptionUnit');
+        var loader = document.getElementById('loader');
+        document.getElementById('addRowButton').onclick = addEmptyRow;
+        var endIcon = tomtom.L.icon({iconUrl: 'img/end.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+        var startIcon = tomtom.L.icon({iconUrl: 'img/start.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+
+        
+        // Creating map
+        var map = tomtom.L.map('map', {
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+        map.zoomControl.setPosition('bottomright');
+
+        // Add main control...
+        var controlPanel = tomtom.controlPanel({
+            position: 'topleft',
+            collapsed: false,
+            close: null,
+            closeOnMapClick: false,
+            footer: createSubmitButton()
+        }).addTo(map);
+
+        controlPanel.addContent(document.getElementById('params'));
+        
+
+        var consumptionResultsPanel = tomtom.controlPanel({
+            position: 'topright',
+            collapsed: false,
+            close: null,
+            closeOnMapClick: false
+        });
+
+        var routeInputs = tomtom.routeInputs().addTo(map);
+
+        routeInputs.on(routeInputs.Events.LocationsFound, function(eventObject) {
+            if (eventObject.points[0] && eventObject.points[1]) {
+                routePoints = eventObject.points;
+            }
+        });
+
+        openTab(undefined, 'combustion');
+
+        
+        // ... with submit button ...
+        function createSubmitButton() {
+            var button = document.createElement('input');
+            button.id = 'submit-button';
+            button.type = 'button';
+            button.value = 'Submit';
+            button.onclick = getRoute;
+            return button;
+        }
+        
+
+        function addMarkers(feature) {
+            var startPoint, endPoint;
+            if (feature.geometry.type === 'MultiLineString') {
+                startPoint = feature.geometry.coordinates[0][0].reverse(); //get first point from first line
+                endPoint = feature.geometry.coordinates.slice(-1)[0].slice(-1)[0].reverse(); //get last point from last line
+            } else {
+                startPoint = feature.geometry.coordinates[0].reverse();
+                endPoint = feature.geometry.coordinates.slice(-1)[0].reverse();
+            }
+            startMarker = tomtom.L.marker(startPoint, {icon: startIcon}).addTo(map);
+            endMarker = tomtom.L.marker(endPoint, {icon: endIcon}).addTo(map);
+        }
+
+        function getInputValue(id) {
+            return document.getElementById(id).value;
+        }
+
+        function showLoader() {
+            loader.style.display = 'block';
+        }
+
+        function hideLoader() {
+            loader.style.display = 'none';
+        }
+
+        function addConsumptionContent(routeJson) {
+            var summary = routeJson.features[0].properties.summary;
+            var container = document.createElement('div');
+            container.className = 'results-list-container';
+            if (currentlySetTab === 'electric') {
+                createConsumptionElements('Consumption in kWh: ', summary.batteryConsumptionInkWh.toFixed(2), container);
+            } else {
+                createConsumptionElements('Fuel used in liters: ', summary.fuelConsumptionInLiters.toFixed(2), container);
+            }
+            createConsumptionElements('Route length in km: ', summary.lengthInMeters / 1000, container);
+            createConsumptionElements('Travel time in minutes: ', (summary.travelTimeInSeconds / 60).toFixed(0), container);
+            consumptionResultsPanel.addTo(map);
+            consumptionResultsPanel.addContent(container);
+        }
+
+        function createConsumptionElements(name, value, container) {
+            var div = document.createElement('div');
+            var nameSpan = document.createElement('span');
+            var valueSpan = document.createElement('span');
+            nameSpan.appendChild(document.createTextNode(name));
+            nameSpan.style.fontWeight = 'bold';
+            valueSpan.appendChild(document.createTextNode(value));
+            div.appendChild(nameSpan);
+            div.appendChild(valueSpan);
+            container.appendChild(div);
+        }
+
+        function addErrorContent(error) {
+            var div = document.createElement('div');
+            div.className = 'error-foldable';
+            var content = document.createTextNode(error);
+            consumptionResultsPanel.addTo(map);
+            div.appendChild(content);
+            consumptionResultsPanel.addContent(div);
+        }
+
+        function removeCurrentRoute() {
+            if (currentRoute) {
+                currentRoute.remove();
+                startMarker.remove();
+                endMarker.remove();
+            }
+        }
+
+        function routingHandler(routeJson) {
+            if (routeJson.error) {
+                addErrorContent(routeJson.error.description);
+            } else {
+                currentRoute = tomtom.L.geoJson(routeJson, {
+                    onEachFeature: addMarkers,
+                    style: {color: '#00d7ff', opacity: 0.8}
+                }).addTo(map);
+                if (routeJson.features && routeJson.features.length > 0) {
+                    addConsumptionContent(routeJson);
+                    map.fitBounds(currentRoute.getBounds(), {padding: [5, 5]});
+                }
+            }
+            hideLoader();
+        }
+
+        function errorHandler(err) {
+            addErrorContent(err.error.description);
+            hideLoader();
+        }
+
+        
+        // ... and its submit handler
+        function getRoute() {
+            if (!routePoints) {
+                addErrorContent('Please provide locations for route from and route to inputs.');
+                return;
+            }
+            try {
+                showLoader();
+                removeCurrentRoute();
+                tomtom.routing(getRoutingParameters())
+                    .locations(routePoints)
+                    .go(routingHandler, errorHandler);
+            } catch (err) {
+                addErrorContent(err.message);
+                hideLoader();
+            }
+        }
+        
+
+        
+        // Get data from form
+        function getElectricParameters() {
+            var result = {
+                vehicleEngineType: 'electric',
+                vehicleWeight: getInputValue('vehicleWeight'),
+                currentChargeInkWh: getInputValue('currentChargeInkWh'),
+                maxChargeInkWh: getInputValue('maxChargeInkWh'),
+                auxiliaryPowerInkW: getInputValue('auxiliaryPowerInkW'),
+                accelerationEfficiency: getInputValue('accelerationEfficiency'),
+                decelerationEfficiency: getInputValue('decelerationEfficiency'),
+                uphillEfficiency: getInputValue('uphillEfficiency'),
+                downhillEfficiency: getInputValue('downhillEfficiency')
+            };
+            result.constantSpeedConsumptionInkWhPerHundredkm = getSpeedConsumptionPairs();
+            return result;
+        }
+
+        function getSpeedConsumptionPairs() {
+            var result = [];
+            var rows = speedConsumptionPairsTable.rows;
+            for (var i = 1; i < rows.length; ++i) {
+                var row = rows[i];
+                var cells = row.cells;
+                result.push(cells[0].firstChild.value + ',' + cells[1].firstChild.value);
+            }
+            return result;
+        }
+
+        function getCombustionParameters() {
+            var result = {
+                vehicleEngineType: 'combustion',
+                vehicleWeight: getInputValue('vehicleWeight'),
+                currentFuelInLiters: getInputValue('currentFuelInLiters'),
+                auxiliaryPowerInLitersPerHour: getInputValue('auxiliaryPowerInLitersPerHour'),
+                fuelEnergyDensityInMJoulesPerLiter: getInputValue('fuelEnergyDensityInMJoulesPerLiter'),
+                accelerationEfficiency: getInputValue('accelerationEfficiency'),
+                decelerationEfficiency: getInputValue('decelerationEfficiency'),
+                uphillEfficiency: getInputValue('uphillEfficiency'),
+                downhillEfficiency: getInputValue('downhillEfficiency')
+            };
+            result.constantSpeedConsumptionInLitersPerHundredkm = getSpeedConsumptionPairs();
+            return result;
+        }
+
+        function getRoutingParameters() {
+            var parameters;
+            if (currentlySetTab === 'electric') {
+                parameters = getElectricParameters();
+            } else {
+                parameters = getCombustionParameters();
+            }
+            parameters.fail = errorHandler;
+            return parameters;
+        }
+        
+
+        function openTab(event, engineType) {
+            currentlySetTab = engineType;
+            if (engineType === 'electric') {
+                combustionParameters.style.display = 'none';
+                electricParameters.style.display = 'block';
+                electricTab.classList.add('active');
+                combustionTab.classList.remove('active');
+            } else if (engineType === 'combustion') {
+                electricParameters.style.display = 'none';
+                combustionParameters.style.display = 'block';
+                electricTab.classList.remove('active');
+                combustionTab.classList.add('active');
+            }
+            setParametersTextAndUnits(engineType);
+        }
+
+        function setParametersTextAndUnits(engineType) {
+            parametersText.innerHTML = capitalizeFirstLetter(engineType) + ' engine params';
+            if (engineType === 'electric') {
+                consumptionUnit.innerHTML = '(kWh)';
+            } else {
+                consumptionUnit.innerHTML = '(l)';
+            }
+
+        }
+
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+
+        function addEmptyRow() {
+            // Insert a row in the table at the last row
+            var newRow = speedConsumptionPairsTable.insertRow(speedConsumptionPairsTable.rows.length);
+            createCell(newRow, 0);
+            createCell(newRow, 1);
+            createDeleteRowCell(newRow, 2);
+        }
+
+        function removeRow(event) {
+            var p = event.target.parentNode.parentNode;
+            p.parentNode.removeChild(p);
+        }
+
+        function createCell(row, index) {
+            var newCell = row.insertCell(index);
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'table-input-column';
+            newCell.appendChild(input);
+            return newCell;
+        }
+
+        function createDeleteRowCell(row, index) {
+            var newCell = row.insertCell(index);
+            var button = document.createElement('button');
+            button.onclick = removeRow;
+            button.className = 'fa fa-trash';
+            newCell.appendChild(button);
+        }
+
+    </script>
+</body>
+</html>

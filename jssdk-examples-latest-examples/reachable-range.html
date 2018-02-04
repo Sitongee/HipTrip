@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing travel mode</title>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' href='js/vendor/font-awesome/css/font-awesome.min.css'>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style type='text/css'>
+        html, body, #map{
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        .tomtom-foldable__header {
+            display: none;
+        }
+
+        .sidepanel {
+            margin: 0;
+            padding: 0;
+        }
+
+        .sidepanel input[type=number] {
+            padding-left: 10px;
+            width: calc(100% - 10px);
+            line-height: 20px;
+        }
+
+        .sidepanel input[type=number]:focus {
+            color: #94B208;
+        }
+        .sidepanel input[type=submit]:disabled {
+            background: lightgray;
+        }
+
+        .sidepanel label {
+            font-size: 100%;
+        }
+
+        .parameter-sidepanel {
+            max-width: 225px;
+            min-width: 200px;
+        }
+
+        .parameter-header {
+            font-size:13px;
+            color: #000000;
+            font-weight: bolder;
+            margin-top:10px;
+            text-align: center;
+        }
+
+        form.combustion .electric,
+        form.electric .combustion {
+            display: none;
+        }
+        img[src='img/waypoint.png'] {
+            z-index: 10000 !important;
+        }
+
+        #show-details + .details {
+            overflow: hidden;
+            max-height: 0;
+            transition: all 0.1s ease-in;
+        }
+
+        form {
+            overflow-y: hidden;
+            overflow-x: hidden;
+        }
+        .tomtom-foldable__content-body {
+            overflow-y: auto;
+            margin-bottom: 50px;
+            padding: 0 10px;
+        }
+
+        @media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+            .tomtom-foldable__content-body {
+                overflow: hidden;
+            }
+            form {
+                overflow-y: auto;
+            }
+        }
+
+        input#submit[type=submit] {
+            bottom: 10px;
+            height: 30px;
+            position: absolute;
+            width: 85%;
+            margin: auto;
+        }
+
+        #show-details:checked + .details {
+            max-height: none;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        label[for=show-details] {
+            border: 0;
+            background: none;
+            text-decoration: underline;
+            display: flex;
+            justify-content: center;
+            user-select: none;
+        }
+        #show-details {
+            display: none;
+        }
+
+        #addRowButton,
+        input#submit[type=submit] {
+            height: 30px !important;
+        }
+        #addRowButton {
+            width: 100%;
+        }
+
+        table {
+            border:none;
+            border-collapse: collapse;
+        }
+        table tr {
+            height: 30px;
+        }
+        table th {
+            width: 40%;
+            text-align: center;
+            font-size:10px;
+        }
+        table td {
+            text-align: center;
+            border-left: 1px solid #000;
+        }
+        table td:first-child {
+            border-left: none;
+        }
+        table td:last-child {
+            border-right: none;
+        }
+        table tr:only-child .table-remove-column {
+            display: none;
+        }
+
+        input[type=number].table-input-column {
+            border-radius: 2px;
+            border: 1px solid #ccc !important;
+            margin: 0 auto;
+            text-align: left;
+            width: 50px;
+            height: 20px;
+        }
+
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+        }
+
+        /* Style the buttons inside the tab */
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        /* Change background color of buttons on hover */
+        .tab button:hover {
+            background-color: #ddd;
+        }
+
+        /* Create an active/current tablink class */
+        .tab button.active {
+            background-color: #ccc;
+        }
+        .tablinks {
+            width:50%;
+        }
+
+        .leaflet-messageBox {
+            z-index: 10001;
+        }
+
+        .loader {
+            background: white;
+            opacity: 0.9;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            padding-top: 10px;
+            padding-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class='map-container use-all-space'>
+        <div id='loader' class='loader loader-center'></div>
+        <div id='map' class='use-all-space'></div>
+        <form action='javascript:void(0)' class='combustion sidepanel parameter-sidepanel'>
+
+            <div class='tab'>
+                <button id='combustionTab' class='tablinks active'>Combustion</button>
+                <button id='electricTab' class='tablinks'>Electric</button>
+            </div>
+
+            <div class='parameter-header'>Speed consumption pairs</div>
+            <div class='sidepanel-input-group'>
+                <table id='speedConsumptionPairs' class='use-all-space'>
+                    <thead>
+                        <th style='font-weight: bolder;'>Speed </br>(<abbr title='kilometers per hour'>km/h</abbr>)</th>
+                        <th style='font-weight: bolder;'>Consumption </br>
+                            (<abbr class='electric' title='kilowatt hours'>kWh</abbr><abbr class='combustion' title='liters'>l</abbr>)
+                        </th>
+                        <th></th>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><input type='number' class='table-input-column' min='0' step='0.1' value='50'></td>
+                            <td><input type='number' class='table-input-column' min='0' step='0.1' value='6.3'></td>
+                            <td class='table-remove-column'><button class='fa fa-trash'></button></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <input id='addRowButton' class='add-button' type="button" value="Add row" />
+            </div>
+
+            <div class='sidepanel-input-group'>
+                <input id='budget' type='number' min='0' max='43' value='5'></input>
+                <label>
+                    <span class='electric'>Energy</span>
+                    <span class='combustion'>Fuel</span>
+                    budget
+                    (<abbr class='electric' title='kilowatt hours'>kWh</abbr><abbr class='combustion' title='liters'>l</abbr>)
+                </label>
+            </div>
+
+            <label for='show-details'>show details</label>
+            <input type='checkbox' id='show-details'></input>
+
+            <div class='details'>
+
+                <div class='sidepanel-input-group'>
+                    <input type='number' step='1' id='vehicleWeight' value='1600'>
+                    <label for='vehicleWeight'> Vehicle weight (kg) </label>
+                </div>
+
+                <div class='sidepanel-input-group'>
+                    <input type='number' step='1' id='currentCharge' min='0' value='43'>
+                    <label for='currentCharge'>
+                        Current
+                        <span class='electric'>charge</span>
+                        <span class='combustion'>fuel</span>
+                        (<abbr class='electric' title='kilowatt hours'>kWh</abbr><abbr class='combustion' title='liters'>l</abbr>)
+                    </label>
+                </div>
+
+                <div class='sidepanel-input-group electric'>
+                    <input type='number' step='1' id='maxCharge' value='85'>
+                    <label for='maxCharge'>
+                        Max charge
+                        (<abbr title='kilowatt hours'>kWh</abbr>)
+                    </label>
+                </div>
+
+                <div class='sidepanel-input-group combustion'>
+                    <input type='number' step='0.1' id='fuelEnergyDensity' min='0.4' value='34.2'>
+                    <label for='fuelEnergyDensity'>
+                        Fuel energy density
+                        (<abbr title='MJoules per liter'>MJ/l</abbr>)
+                    </label>
+                </div>
+
+                <div class='sidepanel-input-group'>
+                    <input type='number' step='0.1' id='auxiliaryPower' value='1.7'>
+                    <label for='auxiliaryPower' title='Auxiliary power in kilowatt hours'>
+                        Auxiliary power (<abbr class='electric' title='kilowatt hours'>kWh</abbr><abbr class='combustion' title='liters per hour'>l/h</abbr>)
+                    </label>
+                </div>
+
+                <div class='sidepanel-input-group'>
+                    <input type='number' step='0.01' id='accelerationEfficiency' min='0' max='3.03' value='0.33'>
+                    <label for='accelerationEfficiency'>
+                        Acceleration efficiency
+                    </label>
+                </div>
+
+                <div class='sidepanel-input-group'>
+                    <input type='number' step='0.01' id='decelerationEfficiency' min='0' max='3.03' value='0.33'>
+                    <label for='decelerationEfficiency'>
+                        Deceleration efficiency
+                    </label>
+                </div>
+
+                <div class='sidepanel-input-group'>
+                    <input type='number' step='0.01' id='uphillEfficiency' min='0' max='3.03' value='0.33'>
+                    <label for='uphillEfficiency'>Uphill efficiency</label>
+                </div>
+
+                <div class='sidepanel-input-group'>
+                    <input type='number' step='0.01' id='downhillEfficiency' min='0' max='3.03' value='0.33'>
+                    <label for='downhillEfficiency'>Downhill efficiency</label>
+                </div>
+
+            </div>
+
+            <input id='submit' type='submit' value='Submit'>
+
+        </form>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+
+            
+            tomtom.routingKey('${api.key.routing}');
+            tomtom.searchKey('${api.key.search}');
+
+            var origin = [52.373154, 4.890659];
+            var map = tomtom.L.map('map', {
+                key: '${api.key}',
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+            
+            map.zoomControl.setPosition('bottomright');
+            var markersLayer = L.tomTomMarkersLayer();
+            var polygonLayer = null;
+
+            
+            tomtom.L.marker(origin, {
+                draggable: true,
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/waypoint.png',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 0]
+                })
+            }).addTo(map).on('dragend', start);
+            
+
+            var formOptions = {
+                closeOnMapClick: false,
+                position: 'topleft',
+                title: null
+            };
+
+            var inputs = {
+                accelerationEfficiency: document.querySelector('#accelerationEfficiency'),
+                auxiliaryPower: document.querySelector('#auxiliaryPower'),
+                budget: document.querySelector('#budget'),
+                currentCharge: document.querySelector('#currentCharge'),
+                decelerationEfficiency: document.querySelector('#decelerationEfficiency'),
+                downhillEfficiency: document.querySelector('#downhillEfficiency'),
+                fuelEnergyDensity: document.querySelector('#fuelEnergyDensity'),
+                maxCharge: document.querySelector('#maxCharge'),
+                uphillEfficiency: document.querySelector('#uphillEfficiency'),
+                vehicleWeight: document.querySelector('#vehicleWeight')
+            };
+            var loader = document.getElementById('loader');
+            var submitButton = document.getElementById('submit');
+
+            tomtom.foldable(formOptions).addTo(map).addContent(document.forms[0]);
+
+            document.querySelector('#show-details').addEventListener('change', function(event) {
+                document.querySelector('label[for="show-details"]').innerHTML = event.target.checked ? 'hide details' : 'show details';
+            });
+
+            var engineType = 'combustion';
+            function openTab(event, value) {
+                engineType = value;
+                var previous = value === 'electric' ? 'combustion' : 'electric';
+                document.forms[0].classList.remove(previous);
+                document.forms[0].classList.add(value);
+                if (event) {
+                    event.target.classList.add('active');
+                    document.getElementById(previous + 'Tab').classList.remove('active');
+                }
+            }
+            openTab(null, 'combustion');
+
+            document.getElementById('combustionTab').addEventListener('click', function(e) {
+                openTab(e, 'combustion');
+            });
+
+            document.getElementById('electricTab').addEventListener('click', function(e) {
+                openTab(e, 'electric');
+            });
+
+            function addRow(event) {
+                event.preventDefault();
+                var table = document.getElementById('speedConsumptionPairs');
+                var row = table.rows[1].cloneNode(true);
+                row.querySelector('.fa-trash').onclick = removeRow;
+                table.tBodies[0].appendChild(row);
+                Array.apply(null, row.querySelectorAll('input')).forEach(function(input) {
+                    input.value = 0;
+                });
+            }
+
+            document.querySelector('#addRowButton').addEventListener('click', addRow);
+
+            function parent(node, parentName) {
+                while (node && node.nodeName !== parentName.toUpperCase()) {
+                    node = node.parentElement;
+                }
+                return node;
+            }
+
+            function removeRow(event) {
+                var row = parent(event.target, 'tr');
+                if (row.parentElement.childElementCount > 1) {
+                    row.parentElement.removeChild(row);
+                }
+            }
+            document.querySelector('.fa-trash').onclick = removeRow;
+
+            
+            // Call API
+            function start(event) {
+                if (event && event.target) {
+                    if (event.target.getLatLng) {
+                        origin = [event.target.getLatLng().lat, event.target.getLatLng().lng];
+                    }
+                }
+                reachableRange(queryParams());
+            }
+            start();
+            
+
+            function validNumber(input) {
+                var min = parseFloat(input.min);
+                var max = parseFloat(input.max);
+                if (!isNaN(min) && !isNaN(max)) {
+                    return Math.min(Math.max(min, input.value), max);
+                } else if (!isNaN(min)) {
+                    return Math.max(min, input.value);
+                } else if (!isNaN(max)) {
+                    return Math.min(max, input.value);
+                }
+                return null;
+            }
+
+            function validateForm(event) {
+                // 'this' is form
+                switch (event.target) {
+                case this.currentCharge: {
+                    this.budget.max = this.currentCharge.value;
+                    this.budget.value = validNumber(this.budget);
+                    break;
+                }
+                case this.decelerationEfficiency: {
+                    this.accelerationEfficiency.max = 1 / this.decelerationEfficiency.value;
+                    this.accelerationEfficiency.value = validNumber(this.accelerationEfficiency);
+                    break;
+                }
+                case this.accelerationEfficiency: {
+                    this.decelerationEfficiency.max = 1 / this.accelerationEfficiency.value;
+                    this.decelerationEfficiency.value = validNumber(this.decelerationEfficiency);
+                    break;
+                }
+                case this.uphillEfficiency: {
+                    this.downhillEfficiency.max = 1 / this.uphillEfficiency.value;
+                    this.downhillEfficiency.value = validNumber(this.downhillEfficiency);
+                    break;
+                }
+                case this.downhillEfficiency: {
+                    this.uphillEfficiency.max = 1 / this.downhillEfficiency.value;
+                    this.uphillEfficiency.value = validNumber(this.uphillEfficiency);
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+
+            
+            // Register event listener
+            document.forms[0].addEventListener('submit', start);
+            
+            document.forms[0].addEventListener('change', validateForm);
+
+            function search(data) {
+                var electric = engineType === 'electric';
+                var query = electric ? 'ELECTRIC_VEHICLE_STATION' : 'PETROL_STATION';
+                return tomtom
+                    .geometrySearch()
+                    .unwrapBbox(true)
+                    .limit(100)
+                    .query(electric ? 'electric vehicle station' : 'gas station')
+                    .geometryList([{
+                        type: 'POLYGON',
+                        vertices: data.geometry.coordinates[0].map(function(coord) {
+                            return coord.slice().reverse().join(',');
+                        })
+                    }])
+                    .go()
+                    .then(function(pois) {
+                        return pois.filter(function(poi) {
+                            return poi.poi.classifications[0].code === query;
+                        });
+                    });
+            }
+
+            
+            // Get query parameters
+            function queryParams() {
+                var consumptionPairs = Array.apply(null, document.querySelectorAll('tr'))
+                    .filter(function(row, index) {
+                        return index;
+                    }).map(function(row) {
+                        return [row.cells[0].firstChild.value, row.cells[1].firstChild.value].join(',');
+                    });
+                // We have references to HTML elements stored in javascript object
+                if (engineType === 'electric') {
+                    return {
+                        origin: origin,
+                        vehicleEngineType: 'electric',
+                        energyBudgetInkWh: inputs.budget.value,
+                        constantSpeedConsumptionInkWhPerHundredkm: consumptionPairs,
+                        vehicleWeight: inputs.vehicleWeight.value,
+                        currentChargeInkWh: inputs.currentCharge.value,
+                        maxChargeInkWh: inputs.maxCharge.value,
+                        auxiliaryPowerInkW: inputs.auxiliaryPower.value,
+                        accelerationEfficiency: inputs.accelerationEfficiency.value,
+                        decelerationEfficiency: inputs.decelerationEfficiency.value,
+                        uphillEfficiency: inputs.uphillEfficiency.value,
+                        downhillEfficiency: inputs.downhillEfficiency.value
+                    };
+                } else {
+                    return {
+                        origin: origin,
+                        vehicleEngineType: 'combustion',
+                        fuelBudgetInLiters: inputs.budget.value,
+                        constantSpeedConsumptionInLitersPerHundredkm: consumptionPairs,
+                        vehicleWeight: inputs.vehicleWeight.value,
+                        currentFuelInLiters: inputs.currentCharge.value,
+                        auxiliaryPowerInLitersPerHour: inputs.auxiliaryPower.value,
+                        fuelEnergyDensityInMJoulesPerLiter: inputs.fuelEnergyDensity.value,
+                        accelerationEfficiency: inputs.accelerationEfficiency.value,
+                        decelerationEfficiency: inputs.decelerationEfficiency.value,
+                        uphillEfficiency: inputs.uphillEfficiency.value,
+                        downhillEfficiency: inputs.downhillEfficiency.value
+                    };
+                }
+            }
+            
+
+            function handleError(error) {
+                var message = error && error.message || (error.error && error.error.description) || 'Error occured';
+                tomtom.messageBox({closeAfter: 1500}).setContent(message).openOn(map);
+                hideLoader();
+            }
+
+            
+            // API call helper
+            function reachableRange(query) {
+                
+                showLoader();
+                
+                try {
+                    tomtom.reachableRange(query)
+                        .go()
+                        .then(function(rangeData) {
+                            // Do something with data
+                            
+                            return Promise.all([rangeData, search(rangeData)]);
+                            
+                        })
+                        .then(function(args) {
+                            var rangeData = args[0];
+                            var searchData = args[1];
+                            if (polygonLayer) {
+                                map.removeLayer(polygonLayer);
+                            }
+                            map.removeLayer(markersLayer.clearLayers());
+                            polygonLayer = L.geoJson(rangeData).addTo(map);
+                            markersLayer
+                                .setMarkerOptions({ noMarkerClustering: true })
+                                .setMarkersData(searchData)
+                                .addMarkers()
+                                .addTo(map);
+                            map.fitBounds(polygonLayer.getBounds(), { padding: [15, 15] });
+                            hideLoader();
+                        })
+                    
+                        .catch(handleError);
+                } catch (error) {
+                    handleError(error);
+                }
+            }
+            
+
+            function showLoader() {
+                loader.style.display = 'block';
+                submitButton.disabled = true;
+            }
+
+            function hideLoader() {
+                loader.style.display = 'none';
+                submitButton.disabled = false;
+            }
+        })(tomtom);
+    </script>
+</body>
+</html>

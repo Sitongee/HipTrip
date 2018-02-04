@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map automated panning</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // define a set of points to cycle through
+        var points = [[39.73845, -104.98485], [34.05224, -118.24334], [37.78008, -122.42017]];
+
+        // keep track of which point is currently being displayed
+        var pointIndex = 0;
+
+        // create the map
+        var map = tomtom.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        function move() {
+            var point = points[pointIndex];
+            map.setView(point, 12);
+            // go back to the beginning once the end is reached
+            pointIndex = (pointIndex + 1) % points.length;
+        }
+        setInterval(move, 2000);
+        move();
+    </script>
+</body>
+</html>

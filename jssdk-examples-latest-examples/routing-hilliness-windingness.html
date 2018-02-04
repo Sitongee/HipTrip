@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing windingness and hilliness modes</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+        <div>
+            <label for='windingness'>
+                Windingness
+                <select id='windingness' name='windingness'>
+                    <option value='normal'>normal</option>
+                    <option value='low'>low</option>
+                    <option value='high'>high</option>
+                </select>
+            </label>
+            <label for='hilliness'>
+                Hilliness
+                <select id='hilliness' name='hilliness'>
+                    <option value='normal'>normal</option>
+                    <option value='low'>low</option>
+                    <option value='high'>high</option>
+                </select>
+            </label>
+        </div>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var route;
+
+            // Setting TomTom keys
+            tomtom.key('${api.key}');
+            tomtom.routingKey('${api.key.routing}');
+
+            // Creating map
+            var map = tomtom.map('map', {
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+
+            tomtom.controlPanel({
+                position: 'topright',
+                title: null,
+                show: null,
+                close: null,
+                collapsed: false,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('map').nextElementSibling);
+
+            function calculateRoute() {
+                var windingness = document.getElementById('windingness').value;
+                var hilliness = document.getElementById('hilliness').value;
+
+                tomtom.routing()
+                    .routeType('thrilling')
+                    .windingness(windingness)
+                    .hilliness(hilliness)
+                    .locations('46.9484,7.4474:46.9924,6.9056')
+                    .go()
+                    .then(function(routeJson) {
+                        if (route) {
+                            map.removeLayer(route);
+                        }
+                        route = tomtom.L.geoJson(routeJson, {style: {color: '#06f', opacity: 0.5}})
+                            .addTo(map);
+                        map.fitBounds(route.getBounds(), {padding: [5, 5]});
+                    }
+                    );
+            }
+
+            document.getElementById('windingness').onchange = calculateRoute;
+            document.getElementById('hilliness').onchange = calculateRoute;
+            calculateRoute();
+        })(tomtom);
+    </script>
+</body>
+</html>

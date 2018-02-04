@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Raw routing instructions support</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='use-all-space flex-horizontal'>
+        <div class='sidepanel'>
+            <h4>Instructions</h4>
+            <div id='tt-results'>
+                Instructions will be displayed below after route will be found.
+            </div>
+        </div>
+        <div id='map' class='flex-expand'></div>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var route, map,
+                routeStyle = {color: '#06f', opacity: 0.8},
+                resultsContainer = document.getElementById('tt-results');
+
+            // Setting TomTom keys
+            tomtom.key('${api.key}');
+            tomtom.routingKey('${api.key.routing}');
+            tomtom.searchKey('${api.key.search}');
+
+            //Creating map
+            map = tomtom.map('map', {
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+
+            var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'routing');
+
+            var langRow = document.createElement('div');
+            var langLabel = document.createElement('label');
+            langLabel.innerHTML = 'Routing language';
+            langLabel.appendChild(languageSelector);
+            langRow.appendChild(langLabel);
+            langRow.className = 'input-container';
+
+            tomtom.controlPanel({
+                position: 'bottomright',
+                title: 'Settings',
+                collapsed: true
+            })
+                .addTo(map)
+                .addContent(langRow);
+
+            function calculateRoute() {
+                return tomtom.routing({instructionsType: 'text'})
+                    .locations('52.36863,4.90606:52.38925,4.92477')
+                    .go();
+            }
+
+            function displayRouteInMap(routeJson) {
+                if (route) {
+                    map.removeLayer(route);
+                }
+                route = tomtom.L.geoJson(routeJson, {style: routeStyle}).addTo(map);
+                map.fitBounds(route.getBounds(), {padding: [5, 5]});
+                return routeJson;
+            }
+
+            function displayInstructions(routeJson) {
+                var guidance = routeJson.features[0].properties.guidance;
+                guidance.instructionGroups.forEach(function(instructionGroup) {
+                    // Print name of the group
+                    var groupEl = tomtom.L.DomUtil.create('p', 'tt-results__groupname');
+                    groupEl.innerHTML = instructionGroup.groupMessage;
+                    resultsContainer.appendChild(groupEl);
+                    // Print steps of the group
+                    var stepsEl = tomtom.L.DomUtil.create('p', 'tt-results__steps');
+                    stepsEl.innerHTML = formatGroupSteps(guidance.instructions, instructionGroup);
+                    resultsContainer.appendChild(stepsEl);
+                });
+                return routeJson;
+            }
+
+            function formatGroupSteps(instructions, instructionGroup) {
+                var firstStep = instructionGroup.firstInstructionIndex,
+                    lastStep = instructionGroup.lastInstructionIndex + 1,
+                    steps = instructions.slice(firstStep, lastStep).map(function(step) {
+                        return step.message;
+                    });
+                return '<ol start=\'' + (firstStep + 1) + '\'><li>' + steps.join('</li><li>') + '</li></ol>';
+            }
+
+            function search() {
+                while (resultsContainer.firstChild) {
+                    resultsContainer.removeChild(resultsContainer.firstChild);
+                }
+                calculateRoute()
+                    .then(displayRouteInMap)
+                    .then(displayInstructions);
+            }
+            search();
+
+            languageSelector.addEventListener('change', search);
+        })(tomtom);
+    </script>
+</body>
+</html>

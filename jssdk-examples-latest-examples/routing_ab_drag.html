@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Basic routing A-B</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Setting TomTomkeys
+        tomtom.routingKey('${api.key.routing}');
+        tomtom.searchKey('${api.key.search}');
+
+        // Creating the map
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        var unitSelector = tomtom.unitSelector.getHtmlElement(tomtom.globalUnitService);
+        var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'search');
+
+        var unitRow = document.createElement('div');
+        var unitLabel = document.createElement('label');
+        unitLabel.innerHTML = 'Unit of measurement';
+        unitLabel.appendChild(unitSelector);
+        unitRow.appendChild(unitLabel);
+        unitRow.className = 'input-container';
+
+        var langRow = document.createElement('div');
+        var langLabel = document.createElement('label');
+        langLabel.innerHTML = 'Search language';
+        langLabel.appendChild(languageSelector);
+        langRow.appendChild(langLabel);
+        langRow.className = 'input-container';
+
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true
+        })
+            .addTo(map)
+            .addContent(unitRow)
+            .addContent(langRow);
+        map.zoomControl.setPosition('topright');
+
+        // Creating routeOnMap widget
+        var routeOnMapView = tomtom.routeOnMap({
+            generalMarker: {draggable: true},
+            startMarker: {
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/start.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            },
+            endMarker: {
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/end.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }
+        }).addTo(map);
+
+        var startLocation = tomtom.searchBox({
+            collapsible: false,
+            icon: 'icon-start-black',
+            searchOnDragEnd: 'open'
+        }).addTo(map);
+
+        var endLocation = tomtom.searchBox({
+            collapsible: false,
+            icon: 'icon-end-black',
+            searchOnDragEnd: 'open'
+        }).addTo(map);
+
+        // Update the searchbox widget content when the markers are dragged
+        routeOnMapView.on(routeOnMapView.Events.MarkerDragEnd, function(result) {
+            var searchBox = result.markerIndex === 0 ? startLocation : endLocation;
+            searchBox.setResultData(result.object);
+        });
+
+        // The next lines update the route when the user change the start and end route points using the searchbox widget
+        var locationsList = [];
+        function updateRoute() {
+            routeOnMapView.draw(locationsList);
+        }
+        function updateRouteStart(pos) {
+            locationsList[0] = pos;
+            updateRoute();
+        }
+        function updateRouteEnd(pos) {
+            locationsList[1] = pos;
+            updateRoute();
+        }
+
+        startLocation.on(startLocation.Events.ResultClicked, function(event) {
+            updateRouteStart(event.data.position);
+        });
+
+        endLocation.on(endLocation.Events.ResultClicked, function(event) {
+            updateRouteEnd(event.data.position);
+        });
+
+        startLocation.on(startLocation.Events.ClearButtonClicked, function() {
+            updateRouteStart();
+        });
+
+        endLocation.on(endLocation.Events.ClearButtonClicked, function() {
+            updateRouteEnd();
+        });
+
+    </script>
+</body>
+</html>

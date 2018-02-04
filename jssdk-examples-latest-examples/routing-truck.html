@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing windingness and hilliness modes</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+        <div>
+            <label for='height'>
+                Height
+                <select id='height' name='height'>
+                    <option value='3'>3m</option>
+                    <option value='5'>5m</option>
+                </select>
+            </label>
+            <label for='weight'>
+                Weight
+                <select id='weight' name='weight'>
+                    <option value='15000'>15t</option>
+                    <option value='60000'>60t</option>
+                </select>
+            </label>
+            <label for='loadType'>
+                Hazardous load
+                <select id='loadType' name='loadType'>
+                    <option value=''>none</option>
+                    <option value='otherHazmatExplosive'>explosive</option>
+                </select>
+            </label>
+        </div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var route;
+
+        // Setting TomTom keys
+        tomtom.key('${api.key}');
+        tomtom.routingKey('${api.key.routing}');
+
+        // Creating map
+        var map = tomtom.map('map', {
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        tomtom.controlPanel({
+            position: 'topright',
+            title: null,
+            show: null,
+            close: null,
+            collapsed: false,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(document.getElementById('map').nextElementSibling);
+
+        function calculateRoute() {
+            var height = document.getElementById('height').value,
+                weight = document.getElementById('weight').value,
+                loadType = document.getElementById('loadType').value;
+
+            tomtom.routing()
+                .travelMode('truck')
+                .vehicleHeight(height)
+                .vehicleWeight(weight)
+                .vehicleLoadType(loadType)
+                .locations('40.7073579,-74.0120615:40.6779221,-73.99384')
+                .go()
+                .then(function(routeJson) {
+                    if (route) {
+                        map.removeLayer(route);
+                    }
+                    route = tomtom.L.geoJson(routeJson, {style: {color: '#06f', opacity: 0.5}})
+                        .addTo(map);
+                    map.fitBounds(route.getBounds(), {padding: [5, 5]});
+                }
+                );
+        }
+
+        document.getElementById('height').onchange = calculateRoute;
+        document.getElementById('weight').onchange = calculateRoute;
+        document.getElementById('loadType').onchange = calculateRoute;
+        calculateRoute();
+    </script>
+</body>
+</html>

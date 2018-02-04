@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing including traffic</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        input[type=checkbox] {
+            margin: 3px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+        <label for='with_traffic'>
+            <input type='checkbox' name='with_traffic' id='with_traffic' checked/>
+            With traffic
+        </label>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var route;
+
+            // Setting TomTom keys
+            tomtom.key('${api.key}');
+            tomtom.trafficKey('${api.key.traffic}');
+            tomtom.routingKey('${api.key.routing}');
+
+            // Creating map
+            var map = tomtom.map('map', {
+                traffic: true,
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+
+            tomtom.controlPanel({
+                position: 'topright',
+                title: null,
+                close: null,
+                show: null,
+                collapsed: false,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('map').nextElementSibling);
+
+            function calculateRoute() {
+                var traffic = document.getElementById('with_traffic').checked;
+                tomtom.routing()
+                    .traffic(traffic)
+                    .locations('51.52968,-0.11124:51.40991,-0.06729')
+                    .go()
+                    .then(function(routeJson) {
+                        if (route) {
+                            map.removeLayer(route);
+                        }
+                        route = tomtom.L.geoJson(routeJson, {
+                            style: {color: traffic ? '#0f0' : '#00f', opacity: 0.8}
+                        }).addTo(map);
+                        map.fitBounds(route.getBounds(), {padding: [5, 5]});
+                    }
+                    );
+            }
+
+            document.getElementById('with_traffic').onchange = calculateRoute;
+            calculateRoute();
+        })(tomtom);
+    </script>
+</body>
+</html>

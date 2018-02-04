@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map with traffic</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <link rel='stylesheet' href='js/vendor/font-awesome/css/font-awesome.min.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var iconOptions = {
+            background: {
+                icon: 'fa fa-car fa-lg',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10],
+                style: {color: '#111'},
+                noPlainSVG: true
+            },
+            icon: null,
+            popupAnchor: [0, -5]
+        };
+
+        function popupText(properites) {
+            return '<h4>' + properites.incidentCategory + '</h4>'
+                    + properites.from + '<br/>' + properites.to;
+        }
+
+        function myTrafficIncidentsPointToLayer(feature, latlng) {
+            var marker = tomtom.L.marker(latlng, {icon: tomtom.L.svgIcon(iconOptions)});
+            marker.bindPopup(popupText(feature.properties));
+            return marker;
+        }
+
+        tomtom.map('map', {
+            key: '${api.key}',
+            center: [48.85862, 2.34987],
+            zoom: 12,
+            source: 'vector',
+            traffic: {
+                style: 'night',
+                pointToLayer: myTrafficIncidentsPointToLayer,
+                key: '${api.key.traffic}'
+            },
+            basePath: '${base.path}'
+        });
+    </script>
+</body>
+</html>

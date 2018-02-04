@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Basic routing A-B</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' href='js/vendor/font-awesome/css/font-awesome.min.css'>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+
+        .tomtom-foldable__content {
+            min-width: 220px;
+            max-width: 220px;
+        }
+
+        .remove-button {
+            float: right;
+            width: 30px;
+            height: 25px;
+            margin-right: 10px;
+            background-color: transparent;
+        }
+
+        .marker-list-element-container {
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            flex: 1;
+            position: relative;
+        }
+
+        .marker-text {
+            width: 80%;
+            margin-right: 5px;
+            cursor: pointer;
+        }
+
+        .button {
+            border: 1px solid transparent;
+            background-color: transparent;
+        }
+
+        .tomtom-foldable input[type=button].button-disabled {
+            background-color: lightgray;
+            cursor: not-allowed;
+        }
+
+        .button-white {
+            background-color: white;
+        }
+
+        .loader-list-element {
+            margin-bottom: 15%;
+            margin-left: 40%;
+        }
+
+    </style>
+
+</head>
+<body class='use-all-space'>
+    <div id='loader' class='loader'></div>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        //Setting TomTom keys
+        tomtom.routingKey('${api.key.routing}');
+        tomtom.searchKey('${api.key.search}');
+        var markers = [];
+        var activeMarkerData, activeRoute;
+        var locationsList = [];
+        var anyMarkerAdded = false;
+
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+        map.zoomControl.setPosition('topright');
+
+        var routeOnMapView = tomtom.routeOnMap({
+            startMarker: {
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/start.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            },
+            endMarker: {
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/end.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }
+        }).addTo(map);
+
+        var startLocation = tomtom.searchBox({
+            collapsible: false,
+            icon: 'icon-start-black',
+            searchOnDragEnd: 'open'
+        }).addTo(map);
+
+        var endLocation = tomtom.searchBox({
+            collapsible: false,
+            icon: 'icon-end-black',
+            searchOnDragEnd: 'open'
+        }).addTo(map);
+
+        var markersList = tomtom.controlPanel({
+            position: 'topleft',
+            title: 'Supporting points list:',
+            collapsed: false,
+            close: null,
+            closeOnMapClick: false,
+            footer: createSubmitButton()
+        }).addTo(map);
+        markersList.addContent(addSupportingPointsListInfo());
+
+        function addSupportingPointsListInfo() {
+            var div = document.createElement('div');
+            div.innerHTML = '<p>Click on the map to add supporting points. </p>' +
+                '<p>If you click on the marker it will be highlighted on the list. </p>' +
+                '<p>You can drag markers to change their positions or remove them and add again. </p>';
+            div.id = 'supporting-points-info';
+            return div;
+        }
+
+        function createSubmitButton() {
+            var button = document.createElement('input');
+            button.id = 'submit-button';
+            button.type = 'button';
+            button.className = 'add-button';
+            button.value = 'Submit';
+            button.onclick = routeWithSupportingPoints;
+            return button;
+        }
+
+        var submitButton = document.getElementById('submit-button');
+
+        function disableSubmit() {
+            submitButton.disabled = true;
+            submitButton.classList.add('button-disabled');
+        }
+
+        disableSubmit();
+
+        function tryEnablingSubmit() {
+            if (locationsList[0] && locationsList[1] && markers.length > 0) {
+                submitButton.disabled = false;
+                submitButton.classList.remove('button-disabled');
+            }
+        }
+
+        function getIcon(big) {
+            return new tomtom.L.SVGIcon({
+                background: {
+                    iconSize: big ? [30, 30] : [23, 23],
+                    iconAnchor: [10, 15],
+                    icon: 'icon-shield',
+                    noPlainSVG: false
+                },
+                icon: {
+                    iconSize: big ? [30, 30] : [25, 25],
+                    iconAnchor: big ? [0, 0] : [1, 1],
+                    icon: 'icon-ic_map_poi_998-white',
+                    noPlainSVG: false
+                },
+                popupAnchor: [0, -30],
+                opacity: 0.8
+            });
+        }
+
+        map.on('click', function(e) {
+            if (!anyMarkerAdded) {
+                markersList.clear();
+                anyMarkerAdded = true;
+            }
+            var marker = new L.marker(e.latlng, {
+                draggable: true,
+                icon: getIcon()
+            }).addTo(map);
+            addOrUpdateMarkerInformation(marker);
+            updateMarkerAndListFocusStyle(marker);
+            tryEnablingSubmit();
+            marker.on('click', function() {
+                updateMarkerAndListFocusStyle(marker, true);
+            });
+            marker.on('dragend', function() {
+                addOrUpdateMarkerInformation(marker);
+                updateMarkerAndListFocusStyle(marker);
+            });
+        });
+
+        function updateMarkerAndListFocusStyle(marker, isMarkerClicked) {
+
+            if (activeMarkerData) {
+                if (activeMarkerData.marker === marker && activeMarkerData.enlarged && isMarkerClicked) {
+                    lessenMarker(marker);
+                    activeMarkerData.enlarged = false;
+                    activeMarkerData.container.style.background = 'transparent';
+                    return;
+                }
+                activeMarkerData.container.style.background = 'transparent';
+                lessenMarker(activeMarkerData.marker);
+            }
+            var markerData = findMarkerInMarkersData(marker);
+            markerData.container.style.background = 'lightgrey';
+            var parentNode = markerData.container.parentNode;
+            parentNode.scrollTop = markerData.container.offsetTop - parentNode.offsetTop;
+            enlargeMarker(marker);
+            activeMarkerData = markerData;
+            activeMarkerData.enlarged = true;
+        }
+
+        function enlargeMarker(marker) {
+            marker.setIcon(getIcon(true));
+        }
+
+        function lessenMarker(marker) {
+            marker.setIcon(getIcon());
+        }
+
+        function addOrUpdateMarkerInformation(marker) {
+            var exists = true;
+            var markerData = findMarkerInMarkersData(marker);
+            if (!markerData) {
+                exists = false;
+                markerData = {};
+                markerData.address = '';
+            }
+            markerData.markerId = marker._leaflet_id;
+            markerData.marker = marker;
+            if (!exists) {
+                markerData.container = createMarkerListElement(markerData);
+                markers.push(markerData);
+            }
+            addListElementLoader(markerData);
+
+            getMarkerAddress(marker).then(function(address) {
+                markerData.address = address;
+                removeListElementLoader(markerData);
+                updateMarkerListText(markerData);
+            });
+        }
+
+        function addListElementLoader(markerData) {
+            var loader = document.createElement('div');
+            loader.classList.add('loader');
+            loader.classList.add('loader-list-element');
+            markerData.textContainer.childNodes[0].nodeValue = '';
+            markerData.textContainer.appendChild(loader);
+        }
+
+        function removeListElementLoader(markerData) {
+            var loader = markerData.textContainer.querySelector('.loader');
+            if (loader) {
+                loader.parentNode.removeChild(loader);
+            }
+        }
+
+        function addSubmitLoader() {
+            var loader = document.getElementById('loader');
+            loader.classList.add('loader');
+            loader.classList.add('loader-center');
+        }
+
+        function removeSubmitLoader() {
+            var loader = document.getElementById('loader');
+            loader.classList.remove('loader');
+            loader.classList.remove('loadcentermit');
+        }
+
+        function findMarkerInMarkersData(marker) {
+            for (var i = 0; i < markers.length; ++i) {
+                if (markers[i].markerId === marker._leaflet_id) {
+                    return markers[i];
+                }
+            }
+            return undefined;
+        }
+
+        function getMarkerAddress(marker) {
+            return tomtom.reverseGeocode({position: marker.getLatLng()})
+                .go()
+                .then(function(response) {
+                    if (response && response.address && response.address.freeformAddress) {
+                        return response.address.freeformAddress;
+                    }
+                    return 'No address found';
+                });
+        }
+
+        function updateMarkerListText(markerData) {
+            markerData.textContainer.childNodes[0].nodeValue = markerData.address;
+        }
+
+        function moveUp(markerData) {
+            for (var i = 1; i < markers.length; ++i) {
+                if (markers[i] === markerData) {
+                    var temp = markers[i - 1];
+                    markerData.container.parentNode.insertBefore(
+                        markerData.container,
+                        temp.container
+                    );
+                    markers[i - 1] = markers[i];
+                    markers[i] = temp;
+                    break;
+                }
+            }
+        }
+
+        function moveDown(markerData) {
+            for (var i = 0; i < markers.length; ++i) {
+                if (markers[i] === markerData && i < markers.length - 1) {
+                    var temp = markers[i + 1];
+                    markerData.container.parentNode.insertBefore(
+                        markerData.container,
+                        temp.container.nextSibling
+                    );
+                    markers[i + 1] = markers[i];
+                    markers[i] = temp;
+                    break;
+                }
+            }
+        }
+
+        function createMarkerListElement(markerData) {
+            var markerId = markerData.marker._leaflet_id;
+            var container = document.createElement('div');
+            container.className = 'marker-list-element-container';
+            var moveButtonsContainer = document.createElement('div');
+            moveButtonsContainer.className = 'marker-list-spacing';
+            var upButton = document.createElement('button');
+            upButton.className = 'fa fa-chevron-up button';
+            upButton.onclick = function() {
+                moveUp(markerData);
+            };
+            var downButton = document.createElement('button');
+            downButton.className = 'fa fa-chevron-down button';
+            downButton.onclick = function() {
+                moveDown(markerData);
+            };
+            moveButtonsContainer.appendChild(upButton);
+            moveButtonsContainer.appendChild(downButton);
+            var textContainer = document.createElement('div');
+            markerData.textContainer = textContainer;
+            textContainer.id = 'marker-text-' + markerId;
+            textContainer.className = 'marker-text';
+            textContainer.onclick = function() {
+                map.panTo(markerData.marker.getLatLng());
+                updateMarkerAndListFocusStyle(markerData.marker);
+            };
+            var text = document.createTextNode(markerData.address);
+            var removeButton = document.createElement('button');
+            removeButton.className = 'remove-button button button-red fa fa-trash';
+            removeButton.onclick = function() {
+                map.removeLayer(markerData.marker);
+                markerData.container.parentNode.removeChild(markerData.container);
+                markers.splice(findMarkerIndex(markerData.marker), 1);
+                if (markers.length === 0) {
+                    disableSubmit();
+                }
+            };
+            textContainer.appendChild(text);
+            container.appendChild(moveButtonsContainer);
+            container.appendChild(textContainer);
+            container.appendChild(removeButton);
+            markersList.addContent(container);
+            return container;
+        }
+
+        function getSupportingPoints() {
+            var result = [];
+            for (var i = 0; i < markers.length; ++i) {
+                result.push(markers[i].marker.getLatLng());
+            }
+            return result;
+        }
+
+        function routeWithSupportingPoints() {
+            disableSubmit();
+            addSubmitLoader();
+            tomtom.routing()
+                .locations(locationsList)
+                .supportingPoints(getSupportingPoints())
+                .go()
+                .then(function(routeJson) {
+                    routeOnMapView.clearRoute();
+                    if (activeRoute) {
+                        map.removeLayer(activeRoute);
+                    }
+                    try {
+                        activeRoute = tomtom.L.geoJson(routeJson, {
+                            style: {
+                                color: '#00d7ff'
+                            }
+                        }).addTo(map);
+
+                        map.fitBounds(activeRoute.getBounds());
+                        tryEnablingSubmit();
+                        removeSubmitLoader();
+                    } catch (err) {
+                        handleError(err);
+                    }
+                }, handleError);
+        }
+
+        function handleError(err) {
+            if (err.description) {
+                tomtom.messageBox({closeAfter: 15000}).setContent(err.description).openOn(map);
+            } else {
+                tomtom.messageBox({closeAfter: 15000}).setContent('Error occured while calculating route.').openOn(map);
+            }
+            tryEnablingSubmit();
+            removeSubmitLoader();
+        }
+
+        function findMarkerIndex(marker) {
+            for (var i = 0; i < markers.length; ++i) {
+                if (marker._leaflet_id === markers[i].markerId) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function updateRoute() {
+            if (activeRoute) {
+                map.removeLayer(activeRoute);
+            }
+            routeOnMapView.draw(locationsList);
+            tryEnablingSubmit();
+        }
+
+        updateRoute();
+
+        function updateRouteStart(pos) {
+            locationsList[0] = pos;
+            updateRoute();
+        }
+        function updateRouteEnd(pos) {
+            locationsList[1] = pos;
+            updateRoute();
+        }
+
+        startLocation.on(startLocation.Events.ResultClicked, function(event) {
+            updateRouteStart(event.data.position);
+        });
+
+        endLocation.on(endLocation.Events.ResultClicked, function(event) {
+            updateRouteEnd(event.data.position);
+        });
+
+        startLocation.on(startLocation.Events.ClearButtonClicked, function() {
+            updateRouteStart();
+            disableSubmit();
+        });
+
+        endLocation.on(endLocation.Events.ClearButtonClicked, function() {
+            updateRouteEnd();
+            disableSubmit();
+        });
+
+    </script>
+</body>
+</html>

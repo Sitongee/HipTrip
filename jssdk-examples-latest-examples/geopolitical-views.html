@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Geopolitical views</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <script type='text/javascript' src='js/vendor/leaflet.sync/L.Map.Sync.js'></script>
+    <style>
+    .leaflet-container {
+        border: 1px solid #000;
+        box-sizing: border-box;
+    }
+    label.disabled,
+    label.warning {
+        opacity: 0.5;
+    }
+    label.disabled ~ label.warning {
+        display: flex;
+        font-size: xx-small;
+        justify-content: center;
+    }
+    .warning {
+        display: none;
+    }
+    label {
+        display: flex;
+        align-items: center;
+        margin: 2px;
+    }
+    select {
+        flex: auto;
+        margin-left: 10px;
+    }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='flex-horizontal flex-expand use-all-space'>
+        <div id='first-map' class='use-all-space'></div>
+        <div id='second-map' class='use-all-space'></div>
+    </div>
+    <script>
+        (function(tomtom) {
+            
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+
+            tomtom.key('${api.key}');
+            var indiaCenter = [24, 78];
+            var indiaZoom = 4;
+
+            var israelCenter = [31, 34.8];
+            var israelZoom = 8;
+
+            // First map
+            var firstMap = tomtom.map('first-map', {
+                source: ['vector', 'raster'],
+                basePath: '${base.path}',
+                center: indiaCenter,
+                zoom: indiaZoom,
+                geopolView: 'Unified',
+                worldCopyJump: false
+            });
+
+            tomtom.controlPanel({collapsed: false, position: 'bottomright'})
+                .addTo(firstMap)
+                .addContent(buildLanguageControl(firstMap))
+                .addContent(buildGeopolViewControl(firstMap))
+                .addContent(buildLayerControl(firstMap));
+
+            // Second map
+            var secondMap = tomtom.map('second-map', {
+                source: ['vector', 'raster'],
+                basePath: '${base.path}',
+                center: indiaCenter,
+                zoom: indiaZoom,
+                geopolView: 'IN',
+                worldCopyJump: false
+            });
+            
+
+            tomtom.controlPanel({collapsed: false, position: 'bottomright'})
+                .addTo(secondMap)
+                .addContent(buildLanguageControl(secondMap))
+                .addContent(buildGeopolViewControl(secondMap))
+                .addContent(buildLayerControl(secondMap));
+
+            
+            // Synchronizing maps using Leaflet.Sync (https://github.com/jieter/Leaflet.Sync)
+            firstMap.sync(secondMap);
+            secondMap.sync(firstMap);
+
+            //Fixing new leaflet bug
+            var turnOffResizeEventHandler = function() {
+                Object.keys(window._leaflet_events).filter(function(a) {
+                    return a.indexOf('resize') > -1;
+                }).forEach(function(name) {
+                    window.removeEventListener('resize', window._leaflet_events[name]);
+                });
+            };
+            firstMap.on('unload', turnOffResizeEventHandler);
+            secondMap.on('unload', turnOffResizeEventHandler);
+            
+
+            // Control panel items
+            function wrapControl(control, label) {
+                var langRow = document.createElement('div');
+                var langLabel = document.createElement('label');
+                langLabel.innerHTML = label + ': ';
+                langLabel.appendChild(control);
+                langRow.appendChild(langLabel);
+                langRow.className = 'input-container';
+                return langRow;
+            }
+            function buildLanguageControl(mapInstance) {
+                var selectorEl = tomtom.languageSelector.getHtmlElement(mapInstance.getLocaleService(), 'maps');
+                var languageWarning = L.DomUtil.create('label', 'warning');
+                var resultElement = wrapControl(selectorEl, 'Language');
+
+                languageWarning.innerHTML = 'Language selection is only possible for vector map tiles.';
+                resultElement.appendChild(languageWarning);
+
+                return resultElement;
+            }
+            
+            function buildGeopolViewControl(mapInstance) {
+                var selectorEl = document.createElement('select'),
+                    currentGeopolViewCode = mapInstance.getGeopolViewService().getCurrentGeopolView().getCode(),
+                    supportedGeopolViews = tomtom.L.GeopolViewService.getSupportedViews();
+
+                selectorEl.className = 'geopol-view-selector';
+                selectorEl.onchange = function() {
+                    if (selectorEl.value === 'IL') {
+                        mapInstance.setView(israelCenter, israelZoom);
+                    } else if (selectorEl.value === 'IN') {
+                        mapInstance.setView(indiaCenter, indiaZoom);
+                    }
+                    toggleLayerSelectVisibility(selectorEl.value === 'IL', mapInstance);
+                    mapInstance.getGeopolViewService().setCurrentGeopolView(this.value);
+                };
+                supportedGeopolViews.forEach(function(geopolView) {
+                    var code = geopolView.getCode(),
+                        currentlySelected = code === currentGeopolViewCode;
+                    selectorEl.appendChild(buildSelectOption(code, geopolView.getLabel(), currentlySelected));
+                });
+                return wrapControl(selectorEl, 'Geopolitical view');
+            }
+            
+
+            function isLayerActive(map, layerType) {
+                var hasRequestedLayer = false;
+                map.eachLayer(function(layer) {
+                    if (layer.name === layerType) {
+                        hasRequestedLayer = true;
+                    }
+                });
+                return hasRequestedLayer;
+            }
+
+            function updateLanguageSelectorAccordingToActiveLayer(activeLayerName, mapInstance) {
+                var languageSelector = mapInstance._controlContainer.querySelector('.tomtom-language-selector');
+
+                if (activeLayerName === 'raster') {
+                    languageSelector.parentElement.classList.add('disabled');
+                } else if (activeLayerName === 'vector') {
+                    languageSelector.parentElement.classList.remove('disabled');
+                }
+                languageSelector.disabled = activeLayerName === 'raster';
+            }
+
+            function buildLayerControl(mapInstance) {
+                var selectorEl = document.createElement('select'),
+                    layerWarning = L.DomUtil.create('label', 'warning no-geopol'),
+                    resultElement;
+                selectorEl.className = 'layer-selector';
+
+                var activeLayer = isLayerActive(mapInstance, 'vector') ? 'vector' : 'raster';
+                selectorEl.onchange = function() {
+                    var selectedOption = selectorEl.value || (isLayerActive(mapInstance, 'vector') ? 'vector' : 'raster');
+                    mapInstance.setMapSource(selectedOption);
+                    updateLanguageSelectorAccordingToActiveLayer(selectedOption, mapInstance);
+                    toggleVisibilityIsraelOption(selectedOption !== 'raster', mapInstance);
+                };
+
+                updateLanguageSelectorAccordingToActiveLayer(activeLayer, mapInstance);
+
+                selectorEl.appendChild(buildSelectOption('vector', 'vector', 'vector' === activeLayer));
+                selectorEl.appendChild(buildSelectOption('raster', 'raster', 'raster' === activeLayer));
+
+                resultElement = wrapControl(selectorEl, 'Layer');
+                layerWarning.innerHTML = 'Israel Geopolitical view is not available for raster maps.';
+                resultElement.appendChild(layerWarning);
+
+                return resultElement;
+            }
+
+            // As Israel Geopolitical view is not available on raster maps, we disable the Layer Select box
+            // if Israel is selected
+            function toggleLayerSelectVisibility(isVisible, mapInstance) {
+                var layerSelector = mapInstance._controlContainer.querySelector('.layer-selector');
+
+                if (isVisible) {
+                    layerSelector.setAttribute('disabled', true);
+                    layerSelector.parentElement.classList.add('disabled');
+                } else {
+                    layerSelector.removeAttribute('disabled');
+                    layerSelector.parentElement.classList.remove('disabled');
+                }
+            }
+
+            // As Israel Geopolitical view is not available on raster maps, we hide the Israel option from
+            // the Geopolitical View Select Box if Raster maps are selected
+            function toggleVisibilityIsraelOption(isVisible, mapInstance) {
+                var geoPolViewSelector = mapInstance._controlContainer.querySelector('.geopol-view-selector'), i;
+                if (!isVisible) {
+                    for (i = 0; i < geoPolViewSelector.length; i++) {
+                        if (geoPolViewSelector.options[i].value === 'IL') {
+                            geoPolViewSelector.remove(i);
+                        }
+                    }
+                } else {
+                    var view, supportedViews = tomtom.L.GeopolViewService.getSupportedViews();
+                    for (i = 0; i < supportedViews.length && !view; i++) {
+                        if (supportedViews[i].getCode() === 'IL') {
+                            view = supportedViews[i];
+                        }
+                    }
+                    if (view) {
+                        geoPolViewSelector.appendChild(buildSelectOption('IL', view.getLabel(), false));
+                    }
+                }
+            }
+
+            function buildSelectOption(value, label, selected) {
+                var option = document.createElement('option');
+                option.value = value;
+                option.text = label;
+                if (selected) {
+                    option.selected = 'selected';
+                }
+                return option;
+            }
+        })(tomtom);
+    </script>
+</body>
+</html>

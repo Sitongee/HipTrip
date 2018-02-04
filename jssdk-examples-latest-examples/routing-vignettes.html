@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing alternatives with deviation constraints</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        #vignette-inputs {
+            width: 150px;
+            min-width: 150px;
+        }
+
+        #vignette-inputs input {
+            margin-left: 5px;
+            margin-bottom: 8px;
+        }
+
+        #vignette-inputs label {
+            align-items: center;
+            display: flex;
+            height: 25px;
+        }
+
+        #vignette-inputs #none-selected-warning {
+            margin-top: 6px;
+            font-size: 9.5px;
+            font-style: italic;
+            display: none;
+        }
+
+        #vignette-inputs #none-selected-warning.show {
+            display: block;
+            animation: fadein .5s;
+        }
+
+        #results-list-container .route-results label {
+            font-weight: bold;
+            margin-bottom: 0px;
+        }
+
+        #results-list-container .route-results {
+            border-left: 6px solid;
+            border-radius: 5px;
+            padding-left: 5px;
+        }
+
+        #results-list-container #main-route-results {
+            border-left-color: #00D7FF;
+            margin-bottom: 10px;
+        }
+
+        #results-list-container #vignette-route-results {
+            border-left-color: #ed21ac;
+        }
+
+        .leaflet-top.leaflet-right {
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        @keyframes fadein {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='loader' class='loader loader-center'></div>
+        <div id='map' class='use-all-space'></div>
+        <form class='sidepanel' id='vignette-inputs'>
+            <label>Vignettes</label>
+            <select id='vignetteAllowAvoid' name='vignetteAllowAvoid'>
+                <option value='allow'>Allow</option>
+                <option value='avoid'>Avoid</option>
+            </select>
+
+            <div id='select-vignettes-group'>
+
+                <label>Countries</label>
+                <label for='hungary'>
+                    <input name='countries-checkbox-group' type='checkbox' id='hungary' value='HUN' checked/> Hungary
+                </label>
+                <label for='czech'>
+                    <input name='countries-checkbox-group' type='checkbox' id='czech' value='CZE' checked/> Czechia
+                </label>
+                <label for='slovakia'>
+                    <input name='countries-checkbox-group' type='checkbox' id='slovakia' value='SVK' checked/> Slovakia
+                </label>
+            </div>
+
+            <div id='none-selected-warning'></div>
+
+            <input id='submit' type='submit' value='Submit'>
+        </form>
+        <div id='results-list-container'>
+            <label>Default route:</label>
+            <div class='route-results' id='main-route-results'></div>
+            <label>Route with vignette options set:</label>
+            <div class='route-results' id='vignette-route-results'></div>
+        </div>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var map,
+                route,
+                locations = '50.746420115485755,14.799316562712196:45.33232542221267,22.753418125212196',
+                startIcon = tomtom.L.icon({
+                    iconUrl: 'img/start.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                }),
+                endIcon = tomtom.L.icon({
+                    iconUrl: 'img/end.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                }),
+                vignetteAllowAvoidInput = document.getElementById('vignetteAllowAvoid'),
+                nonSelectedWarningDiv = document.getElementById('none-selected-warning'),
+                submitButton = document.getElementById('submit'),
+                loader = document.getElementById('loader'),
+                handleRouteJson,
+                handleRouteJsonForVignettes;
+
+            
+            // Setting TomTom keys
+            tomtom.key('${api.key}');
+            tomtom.routingKey('${api.key.routing}');
+
+            // Creating map
+            map = tomtom.map('map', {
+                source: 'vector',
+                basePath: '${base.path}'
+            });
+            
+
+            map.zoomControl.setPosition('bottomright');
+
+            // Adds the control panel to the map
+            tomtom.controlPanel({
+                position: 'topleft',
+                title: null,
+                show: null,
+                close: null,
+                collapsed: false,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('map').nextElementSibling);
+
+            // Adds the panel for route summary
+            tomtom.controlPanel({
+                position: 'topright',
+                collapsed: false,
+                close: null,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('results-list-container'));
+
+            // Adds original route to map
+            routing().go()
+                .then(function(routeJson) {
+                    handleRouteJson(routeJson);
+                });
+
+            
+            function routing() {
+                return tomtom.routing().locations(locations);
+            }
+
+            function calculateVignetteRoute() {
+                var routingHandle,
+                    selectedCountries,
+                    allowVignette = vignetteAllowAvoidInput.value === 'allow';
+
+                try {
+                    if (route) {
+                        map.removeLayer(route);
+                    }
+                    showLoader();
+
+                    selectedCountries = getSelectedCountries();
+
+                    routingHandle = routing();
+                    if (allowVignette) {
+                        routingHandle.allowVignette(selectedCountries);
+                    } else if (selectedCountries !== '') {
+                        routingHandle.avoidVignette(selectedCountries);
+                    }
+
+                    routingHandle.go().then(function(routeJson) {
+                        handleRouteJsonForVignettes(routeJson);
+                    })
+                        .catch(handleError);
+                } catch (error) {
+                    handleError(error);
+                }
+            }
+            
+
+            
+            handleRouteJson = function(routeJson) {
+                createResults(routeJson.features[0].properties.summary, 'main-route-results');
+                var mainRoute = buildRouteOnMap(routeJson, '#00D7FF', 6);
+                addMarkers(routeJson.features[0]);
+                map.fitBounds(mainRoute.getBounds());
+            };
+
+            handleRouteJsonForVignettes = function(routeJson) {
+                createResults(routeJson.features[0].properties.summary, 'vignette-route-results');
+                route = buildRouteOnMap(routeJson, '#ed21ac', 3);
+                map.fitBounds(route.getBounds());
+                hideLoader();
+                document.querySelector('.leaflet-top.leaflet-right').style.opacity = '1';
+            };
+
+            // Helper functions
+            function buildRouteOnMap(routeJson, color, strokeWidth) {
+                return tomtom.L.geoJson(routeJson, {
+                    style: function() {
+                        return {
+                            weight: strokeWidth,
+                            color: color,
+                            opacity: 0.8
+                        };
+                    }
+                }).addTo(map);
+            }
+            
+
+            function getSelectedCountries() {
+                var countryInputs = document.getElementsByName('countries-checkbox-group'),
+                    selectedCountries = [];
+                for (var i = 0; i < countryInputs.length; i++) {
+                    if (countryInputs[i].checked) {
+                        selectedCountries.push(countryInputs[i].value);
+                    }
+                }
+                return selectedCountries.join(',');
+            }
+
+            function buildRouteSummaryMessage(summary) {
+                return [
+                    '<div><label>Travel distance:</label> ' + tomtom.unitFormatConverter.formatDistance(summary
+                        .lengthInMeters) + '</div>',
+                    '<div><label>Travel time:</label> ' + tomtom.unitFormatConverter.formatTime(summary.travelTimeInSeconds) +
+                    '</div>'
+                ].join('');
+            }
+
+            function createResults(routeSummary, parentElementId) {
+                document.getElementById(parentElementId).innerHTML = buildRouteSummaryMessage(routeSummary);
+            }
+
+            
+            function addMarkers(feature) {
+                var coordinates = feature.geometry.coordinates;
+                var firstPoint = coordinates[0].reverse();
+                var lastPoint = coordinates[coordinates.length - 1].reverse();
+                tomtom.L.marker(firstPoint, {
+                    icon: endIcon
+                }).addTo(map);
+                tomtom.L.marker(lastPoint, {
+                    icon: startIcon
+                }).addTo(map);
+            }
+            
+
+            function showLoader() {
+                loader.style.display = 'block';
+                submitButton.disabled = true;
+            }
+
+            function hideLoader() {
+                loader.style.display = 'none';
+                submitButton.disabled = false;
+            }
+
+            function onVignetteCheckboxClick(e) {
+                if (e.srcElement.type === 'checkbox') {
+                    toggleNonVignetteSelectedMsg();
+                }
+            }
+
+            function toggleNonVignetteSelectedMsg() {
+                var actionType;
+                if (getSelectedCountries() === '') {
+                    var msg = vignetteAllowAvoidInput.value === 'allow' ?
+                        'No countries selected - all vignette roads will be avoided' :
+                        'No countries selected - all vignette roads will be allowed';
+
+                    nonSelectedWarningDiv.innerText = msg;
+                    actionType = 'add';
+                } else {
+                    actionType = 'remove';
+                }
+
+                if (document.documentMode) { // IE
+                    if (actionType === 'add') {
+                        nonSelectedWarningDiv.setAttribute('class', 'show');
+                    } else {
+                        nonSelectedWarningDiv.setAttribute('class', '');
+                    }
+                } else { //Other browsers
+                    nonSelectedWarningDiv.classList[actionType]('show');
+                }
+            }
+
+            
+            function onSubmit(e) {
+                e.preventDefault();
+                calculateVignetteRoute();
+            }
+            
+
+            function handleError(error) {
+                var message = error && error.message || (error.error && error.error.description) || 'Error occured';
+                hideLoader();
+                tomtom.messageBox({
+                    closeAfter: 3000
+                }).setContent(message).openOn(map);
+            }
+
+            map.once('unload', function() {
+                var dummyFunc = function() {
+                    return undefined;
+                };
+
+                handleRouteJson = dummyFunc;
+                handleRouteJsonForVignettes = dummyFunc;
+            });
+
+            
+            document.getElementById('submit').onclick = onSubmit;
+            
+
+            document.getElementById('select-vignettes-group').onclick = onVignetteCheckboxClick;
+            vignetteAllowAvoidInput
+                .onchange = toggleNonVignetteSelectedMsg;
+            
+            submitButton.onclick = onSubmit;
+            calculateVignetteRoute();
+            
+        })(tomtom);
+    </script>
+</body>
+
+</html>

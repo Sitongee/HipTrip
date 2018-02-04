@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Getting and setting style</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <script src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<style>
+    .spacing-btn {
+        min-width: 230px;
+        margin-bottom: 10px;
+    }
+
+    .align-buttons {
+        text-align: center;
+        margin-top: 10px;
+    }
+
+    .file-style {
+        width: 100%;
+        line-height: 1ex !important;
+        margin-top: 10px;
+    }
+
+    .checkboxes-container {
+        overflow-y: scroll;
+        height: 68%;
+    }
+
+    #download {
+        cursor: pointer;
+        background: none;
+        color: inherit;
+        border: none;
+        padding: 0;
+        text-decoration: underline;
+    }
+
+    #toggle-all {
+        border-bottom: 1px solid;
+        font-size: 14px;
+        font-family: 'TomTom bold', Helvetica, Arial, sans-serif;
+        color: #484848;
+    }
+</style>
+
+<body class='use-all-space'>
+
+    <div class='flex-horizontal use-all-space'>
+        <div class='sidepanel'>
+            <h4 id='zoom-level-placeholder'>
+                Zoom level: <span id='zoom-level'></span>
+            </h4>
+            <div class="sidepanel-input-group">
+                <div>You can upload a JSON file with a style definition (e.g. created with <a href="https://maputnik.github.io/editor/" target="_blank">Maputnik</a>) in order to change the style of the map:
+                <input class="file-style" type="file" id="fileInput" accept=".json">
+                In order to start creating your own custom style, you can download basic main style from
+                <button id="download"> here.</button>
+                </div>
+            </div>
+            <label id='toggle-all' class='checkbox-label'><input type='checkbox' class='example-checkbox' value='all' checked>
+                All layers (visible:
+                <span id='numberOfVisibleLayers'></span>
+                /
+                <span id='numberOfLayers'></span>
+                )
+            </label>
+            <div id='tomtom-layers-checkboxes' class='checkboxes-container'></div>
+        </div>
+        <div id='map' class='flex-expand'></div>
+    </div>
+
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var currentVectorStyle, baseLayers, vectorLayer, layersTotalCount,
+            visibleLayers = [],
+            hiddenLayers = [];
+
+        
+        // Create a map
+        var map = tomtom.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+        
+
+        var languageLabel = L.DomUtil.create('label');
+        languageLabel.innerHTML = 'Maps language';
+        var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'maps');
+        languageLabel.appendChild(languageSelector);
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(languageLabel);
+
+        baseLayers = map.getBaseLayers();
+        vectorLayer = baseLayers.vector ? baseLayers.vector : undefined;
+
+        if (vectorLayer !== undefined) {
+            vectorLayer.on(L.TomTomVectorLayer.Events.MAP_ERROR, function() {
+                notifyError('An error occurred during the parsing phase');
+            });
+        } else {
+            alert('Vector map was not created correctly'); //eslint-disable-line
+            throw new Error('Vector map was not created correctly');
+        }
+
+        
+        // React to style changing
+        updateUiAfterStyleChange();
+
+        function updateUiAfterStyleChange() {
+            vectorLayer.once(tomtom.L.TomTomVectorLayer.Events.STYLE_LOAD_END, function() {
+                currentVectorStyle = vectorLayer.getStyle();
+                visibleLayers = currentVectorStyle.layers.slice();
+                layersTotalCount = currentVectorStyle.layers.length;
+                hiddenLayers = [];
+                createLayersCheckboxes();
+                updateLayersCounter();
+            });
+        }
+        
+
+        function updateLayersCounter() {
+            document.getElementById('numberOfLayers').innerHTML = String(layersTotalCount);
+            document.getElementById('numberOfVisibleLayers').innerHTML = String(visibleLayers.length);
+        }
+
+        function createCheckbox(layer) {
+            var label = document.createElement('label');
+            label.className = 'checkbox-label';
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'example-checkbox';
+            checkbox.checked = true;
+            checkbox.value = layer.id;
+            var labelContent = document.createTextNode(layer.id);
+            label.appendChild(checkbox);
+            label.appendChild(labelContent);
+            return label;
+        }
+
+        function createLayersCheckboxes() {
+            var checkboxesList = document.getElementById('tomtom-layers-checkboxes');
+            while (checkboxesList.firstChild) {
+                checkboxesList.removeChild(checkboxesList.firstChild);
+            }
+            checkboxesList.onclick = checkboxClickHandler;
+            visibleLayers.forEach(function(layer) {
+                checkboxesList.appendChild(createCheckbox(layer));
+            });
+        }
+
+        
+        // Handle disabling/enabling layers
+        function checkboxClickHandler(event) {
+            var domElem = event.target;
+            if (domElem.nodeName === 'INPUT' && domElem.type === 'checkbox') {
+                domElem.checked ? restoreLayer(domElem.value) : hideLayer(domElem.value);
+                currentVectorStyle.layers = visibleLayers;
+                vectorLayer.setStyle(currentVectorStyle);
+                updateLayersCounter();
+            }
+        }
+
+        function hideLayer(layerId) {
+            var layersToHide = visibleLayers.filter(function(layer) {
+                return layer.id === layerId;
+            });
+            if (layersToHide.length > 0) {
+                var layerIndex = currentVectorStyle.layers.indexOf(layersToHide[0]);
+                hiddenLayers.push({
+                    layer: layersToHide[0],
+                    index: layerIndex
+                });
+                visibleLayers.splice(visibleLayers.indexOf(layersToHide[0]), 1);
+            }
+        }
+
+        function restoreLayer(layerId) {
+            var layersToRestore = hiddenLayers.filter(function(removedLayer) {
+                return removedLayer.layer.id === layerId;
+            });
+            if (layersToRestore.length > 0) {
+                var layerIndex = hiddenLayers.indexOf(layersToRestore[0]);
+                visibleLayers.splice(layersToRestore[0].index, 0, layersToRestore[0].layer);
+                hiddenLayers.splice(layerIndex, 1);
+            }
+        }
+        
+
+        function notifyError(message) {
+            tomtom.messageBox({ closeAfter: 5000 })
+                .setContent(message)
+                .openOn(map);
+        }
+
+        document.querySelector('#toggle-all input').addEventListener('change', function(evt) {
+            visibleLayers = visibleLayers.slice();
+            Array.prototype.forEach.call(document.querySelectorAll('#tomtom-layers-checkboxes input'), function(checkbox) {
+                checkbox.checked = evt.target.checked;
+                if (checkbox.checked) {
+                    restoreLayer(checkbox.value);
+                } else {
+                    hideLayer(checkbox.value);
+                }
+            });
+            currentVectorStyle.layers = visibleLayers;
+            vectorLayer.setStyle(currentVectorStyle);
+            updateLayersCounter();
+        });
+
+        
+        // Handle style uploads
+        var fileInput = document.getElementById('fileInput');
+
+        fileInput.onclick = function() {
+            this.value = null;
+        };
+
+        fileInput.onchange = function(event) {
+            var file = event.target.files[0];
+            if (file) {
+                var fileReader = new FileReader();
+                fileReader.onloadend = function() {
+                    try {
+                        var style = JSON.parse(fileReader.result);
+                        updateUiAfterStyleChange();
+                        vectorLayer.setStyle(style);
+                    } catch (error) {
+                        notifyError('Couldn\'t parse JSON file');
+                    }
+                };
+                fileReader.readAsText(file);
+            }
+        };
+        
+
+        map.on('zoom', updateZoomControl);
+
+        function updateZoomControl() {
+            var zoomLevel = map.getZoom();
+            document.getElementById('zoom-level').innerHTML = zoomLevel.toString();
+        }
+
+        updateZoomControl();
+
+        function createAndDownloadFile(filename, text) {
+            if (navigator.msSaveBlob) { // support for IE
+                navigator.msSaveBlob(new Blob([text], { type: 'application/json' }), filename);
+            } else {
+                var element = document.createElement('a');
+                element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+                element.setAttribute('download', filename);
+
+                element.style.display = 'none';
+                document.body.appendChild(element);
+
+                element.click();
+
+                document.body.removeChild(element);
+            }
+        }
+
+        document.getElementById('download').addEventListener('click', function() {
+            var apiKey = prompt('Please provide a valid API key for Online Maps to have it used in a generated style file.'); //eslint-disable-line
+            if (apiKey) {
+                var xmlHttp = new XMLHttpRequest();
+                xmlHttp.onreadystatechange = function() {
+                    if (xmlHttp.readyState === 4 && xmlHttp.status === 200) {
+                        var response = xmlHttp.response;
+                        response = response.replace(/\{key\}/g, apiKey);
+                        response = response.replace(
+                            '"glyphs": "{hosted_style_url}/glyphs/tt/{fontstack}/{range}.pbf"',
+                            '"glyphs": "https://api.tomtom.com/maps-sdk-js/${assets.version}/glyphs/{fontstack}/{range}.pbf"'
+                        );
+                        response = response.replace(
+                            '"sprite": "{hosted_style_url}/sprite/tt/sprite"',
+                            '"sprite": "https://api.tomtom.com/maps-sdk-js/${assets.version}/sprites/sprite"'
+                        );
+                        createAndDownloadFile('basic_main.json', response);
+                    }
+                };
+                xmlHttp.open('GET', 'sdk/styles/basic_main.json', true);
+                xmlHttp.send(null);
+            }
+        });
+    </script>
+</body>
+
+</html>

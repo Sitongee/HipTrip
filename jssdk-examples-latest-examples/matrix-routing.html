@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html class="use-all-space">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset="UTF-8">
+    <title>TomTom JavaScript SDK - Map initialization</title>
+    <meta name="viewport"
+          content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+    <link rel="stylesheet" href="js/vendor/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" type="text/css" href="sdk/map.css"/>
+    <link rel="stylesheet" type="text/css" href="elements.css">
+    <style>
+        .geoResponse-result {
+            border-bottom: solid medium black;
+            cursor: pointer;
+        }
+
+        .geoResponse-result:last {
+            border-bottom: none
+        }
+
+        .tab-button-row {
+            display: flex;
+            justify-content: center;
+            height: 23px;
+        }
+
+        .tab-button {
+            height: 20px;
+            width: 30px;
+            padding: 0;
+            line-height: 0;
+        }
+
+        .tab-button, .content-panel {
+            cursor: pointer;
+        }
+
+        .tab-button--clicked{
+            cursor: auto;
+            background-color: black;
+            border: solid thin black;
+            color: white;
+        }
+
+        .content-header-label {
+            font-size: small;
+            font-weight: bold;
+        }
+
+        .name-row {
+            margin-bottom: 3px;
+        }
+
+        .tomtom-foldable input[type=button]:disabled {
+            background-color: lightgray;
+        }
+
+    </style>
+    <script src="sdk/tomtom.min.js"></script>
+</head>
+<body class="use-all-space">
+<div id='loader' class='loader loader-center'></div>
+<div id="map" class="use-all-space"></div>
+<script>
+    // Define your product name and version
+    tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+    var errorCodes = {
+        noResultsFound: 'NO_RESULTS_FOUND'
+    };
+
+    
+    // Setup the map
+    tomtom.searchKey('${api.key.search}');
+    tomtom.routingKey('${api.key.routing}');
+    var map = tomtom.L.map('map', {
+        key: '${api.key}',
+        source: 'vector',
+        center: [48.85862, 2.34987],
+        zoom: 12,
+        basePath: '${base.path}'
+    });
+    
+
+    var markersLayer = L.tomTomMarkersLayer();
+    markersLayer.setMarkerOptions({noMarkerClustering: true}).addTo(map);
+
+    
+    // And Control Panel with the submit button
+    var controlPanel = tomtom.controlPanel({
+        position: 'topleft',
+        collapsed: false,
+        close: null,
+        closeOnMapClick: false,
+        footer: createSubmitButton()
+    }).addTo(map);
+    
+
+    var resultsList = tomtom.resultsList({
+        closeOnClick: false,
+        content: 'Please pick one of the categories on the left. There will be maximum 10 results presented.'
+    }).addTo(map);
+
+    var loader = document.getElementById('loader');
+    var categoryButton = document.querySelector('.submit-btn');
+
+    var currentRoute = null;
+
+    /*
+     * Draw search center position
+     */
+    function prepareSearchCenterMarker(mapCenter) {
+        var currentLocation = mapCenter;
+        var markerOptions = {
+            title: 'Search Center\nLatitude: ' + currentLocation.lat +
+            '\nLongitude: ' + currentLocation.lng,
+            icon: tomtom.L.icon({
+                iconUrl: 'img/center_marker.svg',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            })
+        };
+
+        return tomtom.L.marker(currentLocation, markerOptions);
+    }
+
+    /*
+     * Clears markers, search results and a route.
+     */
+    function cleanUp() {
+        resultsList.clear();
+        markersLayer.clearLayers();
+        if (currentRoute) {
+            currentRoute.remove();
+            currentRoute = null;
+        }
+    }
+
+    /**
+     * Create single entry in category selector
+     */
+    function createOption(label, value) {
+        var option = tomtom.L.DomUtil.create('option');
+        option.value = value;
+        option.textContent = label;
+        return option;
+    }
+
+    /**
+     * Create category selector element
+     */
+    function prepareCategorySelector() {
+        var categorySelector = tomtom.L.DomUtil.create('select');
+        categorySelector.appendChild(createOption('Pick a category ...', 'none'));
+        categorySelector.appendChild(createOption('Hospital', 'hospital'));
+        categorySelector.appendChild(createOption('Pharmacy', 'pharmacy'));
+        categorySelector.appendChild(createOption('Stadium', 'stadium'));
+
+        return categorySelector;
+    }
+
+    /**
+     * Create category selector wrapper for control panel
+     */
+    function prepareCategorySelectorRow(categorySelector) {
+        var categoryRow = tomtom.L.DomUtil.create('div');
+        var categoryLabel = tomtom.L.DomUtil.create('label');
+
+        categoryLabel.innerHTML = 'Categories ';
+
+        categoryLabel.appendChild(categorySelector);
+        categoryRow.appendChild(categoryLabel);
+        categoryRow.className = 'input-container';
+
+        return categoryRow;
+    }
+
+    
+    function createSubmitButton() {
+        var button = document.createElement('input');
+        button.type = 'button';
+        button.className = 'submit-btn';
+        button.value = 'Submit';
+        button.onclick = submitBtnClickHandler;
+        return button;
+    }
+    
+
+    /**
+     * Requests data from routing service
+     */
+    function performRoutingRequest(mapCenter, searchResult) {
+        return tomtom.routing()
+            .locations(prepareLocationsForRouting(mapCenter, searchResult))
+            .go();
+    }
+
+    
+    /**
+     * Requests data from search service
+     */
+    function performCategorySearchRequest(query, center) {
+        return tomtom.categorySearch()
+            .query(query)
+            .center(center)
+            .radius(10000)
+            .limit(10)
+            .go();
+    }
+
+    /**
+     * Requests data from matrix routing service
+     */
+    function performMatrixRoutingRequest(mapCenter, searchResults) {
+        function convertToPoint(coordinateArray) {
+            return {
+                point: {
+                    latitude: coordinateArray[0],
+                    longitude: coordinateArray[1]
+                }
+            };
+        }
+
+        if (!searchResults || searchResults.length === 0) {
+            return new Promise(function(resolve, reject) {
+                reject({reason: errorCodes.noResultsFound});
+            });
+        }
+
+        return tomtom.matrixRouting()
+            .computeTravelTimeFor('all')
+            .departAt('now')
+            .origins([convertToPoint([mapCenter.lat, mapCenter.lng])])
+            .destinations(searchResults.map(function(searchResult) {
+                return convertToPoint([searchResult.position.lat, searchResult.position.lon]);
+            }))
+            .go()
+            .then(function(matrixRoutingResponse) {
+                return new Promise(function(resolve) {
+                    resolve({ 'searchResults': searchResults, 'matrixRoutingResponse': matrixRoutingResponse });
+                });
+            });
+    }
+    
+
+    /**
+     * Format coordinates in a way understood by routing service
+     */
+    function prepareLocationsForRouting(mapCenter, searchResult) {
+        return String(mapCenter.lat) + ',' + String(mapCenter.lng) + ':' + String(searchResult.position.lat) + ',' +
+                String(searchResult.position.lon);
+    }
+
+    /**
+     * Generates marker popup content
+     */
+    function markerPopupContentGenerator(point) {
+        var container = tomtom.L.DomUtil.create('b');
+
+        container.textContent = point.poi.name;
+
+        return container;
+    }
+
+    /**
+     * Creates a single entry row for a search result name
+     */
+    function prepareNameEntryRow(name) {
+        var row = tomtom.L.DomUtil.create('div', 'name-row');
+        var labelElement = tomtom.L.DomUtil.create('b');
+        labelElement.textContent = name;
+        row.appendChild(labelElement);
+        return row;
+    }
+
+    /**
+     * Creates a single entry row for a search result
+     */
+    function prepareResultEntryRow(value) {
+        var row = tomtom.L.DomUtil.create('div');
+        var valueElement = tomtom.L.DomUtil.create('div');
+        valueElement.textContent = value;
+        row.appendChild(valueElement);
+        return row;
+    }
+
+    /**
+     * Creates a single row representing search result
+     */
+    function prepareResultRow(mapCenter, markers, searchResult, index, children) {
+
+        function onResultClickedHandlerFactory(mapCenter, searchResult) {
+            return function() {
+                performRoutingRequest(mapCenter, searchResult)
+                    .then(function(routeJson) {
+                        if (currentRoute) {
+                            currentRoute.remove();
+                        }
+                        currentRoute = tomtom.L.geoJson(routeJson, {
+                            style: {color: '#FF00D2', opacity: 0.8}
+                        }).addTo(map);
+                    });
+            };
+        }
+
+        function onResultHoverHandlerFactory() {
+            return function() {
+                markers[index].openPopup();
+            };
+        }
+
+        var poiName = searchResult.poi.name;
+        var row = tomtom.L.DomUtil.create('div', 'geoResponse-result');
+
+        row.addEventListener('click', onResultClickedHandlerFactory(mapCenter, searchResult));
+        row.addEventListener('mouseover', onResultHoverHandlerFactory());
+
+        row.appendChild(prepareNameEntryRow(poiName));
+
+        children.forEach(function(child) {
+            row.appendChild(child);
+        });
+
+        return row;
+    }
+
+    /**
+     * Creates rows with matrix routing information for a single search result
+     */
+    function prepareResultRows(matrixRoutingResults, mapCenter, markers, contents) {
+        return function(searchResult, searchResultIndex) {
+
+            function formatTime(time) {
+                var mins = parseInt(time / 60);
+                var secs = parseInt(time % 60);
+                var hours = parseInt(mins / 60);
+                if (hours > 0) {
+                    mins = parseInt(mins % 60);
+                }
+
+                if (!secs && !mins && !hours) {
+                    return 'none';
+                }
+
+                var result = '';
+
+                if (hours) {
+                    result += hours + ' h ';
+                }
+
+                if (mins) {
+                    result += mins + ' min' + (mins === 1 ? ' ' : 's ');
+                }
+
+                if (secs) {
+                    result += secs + ' sec' + (secs === 1 ? '' : 's');
+                }
+
+                return result;
+            }
+
+            function formatLengthMetric(lengthInMeters) {
+                var kms = parseInt(lengthInMeters / 1000);
+
+                if (kms) {
+                    return (lengthInMeters / 1000).toFixed(2) + ' km';
+                } else {
+                    return lengthInMeters + ' m';
+                }
+
+            }
+
+            var matrixRoutingResult = matrixRoutingResults[0][searchResultIndex];
+            var children = [];
+
+            function isString(value) {
+                return typeof value === 'string';
+            }
+
+            if (isString(matrixRoutingResult)) {
+                contents.forEach(function() {
+                    children.push(prepareResultEntryRow('Error:' + matrixRoutingResult));
+                });
+            } else {
+                var lengthInMeters = matrixRoutingResult.routeSummary.lengthInMeters;
+                children = [
+                    prepareResultEntryRow(formatLengthMetric(lengthInMeters)),
+                    prepareResultEntryRow(formatTime(matrixRoutingResult.routeSummary.trafficDelayInSeconds)),
+                    prepareResultEntryRow(new Date(matrixRoutingResult.routeSummary.departureTime).toLocaleString()),
+                    prepareResultEntryRow(new Date(matrixRoutingResult.routeSummary.arrivalTime).toLocaleString()),
+                    prepareResultEntryRow(formatTime(matrixRoutingResult.routeSummary.travelTimeInSeconds)),
+                    prepareResultEntryRow(formatTime(matrixRoutingResult.routeSummary.noTrafficTravelTimeInSeconds)),
+                    prepareResultEntryRow(formatTime(matrixRoutingResult.routeSummary.historicTrafficTravelTimeInSeconds)),
+                    prepareResultEntryRow(formatTime(matrixRoutingResult.routeSummary.liveTrafficIncidentsTravelTimeInSeconds))
+                ];
+            }
+
+            children.forEach(function(child, index) {
+                contents[index].appendChild(prepareResultRow(mapCenter, markers, searchResult, searchResultIndex, [child]));
+            });
+
+        };
+    }
+
+    /*
+     * Creates a list of buttons used to switch between different view on result list
+     */
+    function prepareResultsListViewButtons(parentElement) {
+        var buttonNames = ['Length', 'Traffic delay', 'Departure time', 'Arrival time',
+            'Travel time', 'Travel time w/o traffic', 'Historic traffic travel time', 'Live traffic travel time'];
+        var buttons = [];
+        var buttonsRow1 = tomtom.L.DomUtil.create('div', 'tab-button-row', parentElement);
+        var buttonsRow2 = tomtom.L.DomUtil.create('div', 'tab-button-row', parentElement);
+
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-road', buttonsRow1));
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-car', buttonsRow1));
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-hourglass-start', buttonsRow1));
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-hourglass-end', buttonsRow1));
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-clock-o', buttonsRow2));
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-play-circle-o', buttonsRow2));
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-history', buttonsRow2));
+        buttons.push(tomtom.L.DomUtil.create('button', 'tab-button fa fa-line-chart', buttonsRow2));
+
+        buttons.forEach(function(button, index) {
+            button.title = buttonNames[index];
+        });
+
+        return buttons;
+    }
+
+    /**
+     * Creates result list content
+     */
+    function prepareResultsContent(searchResults, matrixRoutingResults, mapCenter, markers) {
+        var createElement = tomtom.L.DomUtil.create;
+
+        var buttonsPanel = createElement('div');
+        var buttons = prepareResultsListViewButtons(buttonsPanel);
+        var viewCategoryInformation = createElement('div', 'content-header-label');
+
+        var contentPanel = createElement('div');
+        var contents = buttons.map(function() {
+            return createElement('div', 'content-panel');
+        });
+
+        function selectButton(buttonIndex) {
+            while (contentPanel.firstChild) {
+                contentPanel.removeChild(contentPanel.firstChild);
+            }
+
+            buttons.forEach(function(button) {
+                button.classList.remove('tab-button--clicked');
+            });
+
+            buttons[buttonIndex].classList.add('tab-button--clicked');
+
+            contentPanel.appendChild(contents[buttonIndex]);
+            viewCategoryInformation.textContent = buttons[buttonIndex].title;
+        }
+
+        function buttonClickHandlerFactory(buttonIndex) {
+            return function() {
+                selectButton(buttonIndex);
+            };
+        }
+
+        buttons.forEach(function(button, index) {
+            button.addEventListener('click', buttonClickHandlerFactory(index));
+        });
+
+        searchResults.forEach(prepareResultRows(matrixRoutingResults, mapCenter, markers, contents));
+
+        resultsList.addContentHeader(buttonsPanel);
+        resultsList.addContentHeader(viewCategoryInformation);
+        resultsList.addContent(contentPanel);
+
+        selectButton(0);
+    }
+
+    var categorySelector = prepareCategorySelector();
+    controlPanel.addContent(prepareCategorySelectorRow(categorySelector));
+
+    function showLoader() {
+        loader.style.display = 'block';
+    }
+
+    function hideLoader() {
+        loader.style.display = 'none';
+    }
+
+    function disableCategoryControls() {
+        categorySelector.disabled = true;
+        categoryButton.disabled = true;
+    }
+
+    function enableCategoryControls() {
+        categorySelector.disabled = false;
+        categoryButton.disabled = false;
+    }
+
+    
+    // Everything starts when this button is clicked
+    function submitBtnClickHandler() {
+        var mapCenter = map.getCenter();
+        var selector = categorySelector;
+        var selectedValue = selector.value;
+        
+        if ('none' === selectedValue) {
+            return;
+        }
+
+        showLoader();
+        disableCategoryControls();
+        
+        performCategorySearchRequest(selectedValue, mapCenter).then(function(searchResults) {
+            return performMatrixRoutingRequest(mapCenter, searchResults);
+        }).then(function(result) {
+            // We have both search and matrix responses
+            
+            var searchResults = result.searchResults, matrixRoutingResponse = result.matrixRoutingResponse;
+            cleanUp();
+            resultsList.unfold();
+            markersLayer.setPopupOptions({
+                popupContent: markerPopupContentGenerator
+            })
+                .setMarkersData(searchResults).addMarkers();
+            var mapCenterMarker = prepareSearchCenterMarker(mapCenter);
+            markersLayer.addLayer(mapCenterMarker);
+
+            prepareResultsContent(searchResults, matrixRoutingResponse, mapCenter, markersLayer.getMarkers());
+            map.fitBounds(markersLayer.getBounds());
+            hideLoader();
+            enableCategoryControls();
+            
+        }, function(error) {
+            // Handle errors here
+            
+            hideLoader();
+            enableCategoryControls();
+            if (error && error.reason === errorCodes.noResultsFound) {
+                cleanUp();
+                resultsList.setContent('Cannot find results for a requested category. Please move to a different area.');
+            }
+            
+        });
+    }
+    
+
+</script>
+</body>
+</html>

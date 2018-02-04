@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Route Sections</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        html.use-all-space {
+            overflow-y: hidden;
+        }
+        #section-type-inputs {
+            width: 190px;
+            min-width: 190px;
+            margin-right: 0px;
+        }
+        #section-type-inputs label {
+            height: 20px;
+        }
+        #labels-container #route-labels div{
+            border-left: 6px solid;
+            border-radius: 5px;
+            padding-left: 5px;
+            margin-bottom: 3px;
+        }
+        #route-labels div:hover{
+            cursor: pointer;
+            box-shadow: 0px 2px #888888;
+        }
+        .leaflet-top.leaflet-right {
+            opacity: 0;
+            -webkit-transition: opacity 1s;
+            transition: opacity 1s;
+        }
+        .leaflet-top.leaflet-right.visible {
+            opacity: 1;
+        }
+        .loader {
+            display: none;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            z-index: 20;
+        }
+        #map .sidepanel {
+            display: block;
+        }
+        #map path {
+            transition: stroke-width .3s ease-in-out;
+        }
+        #map path.animate {
+            stroke-width: 20px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='loader' class='loader'></div>
+        <div id='map' class='use-all-space'></div>
+        <form class='sidepanel' id='section-type-inputs'>
+            <label>Scenario</label>
+            <select id='scenario' name='scenario'>
+                <option value='crossCountry'>Cross country</option>
+                <option value='motorwayVignette'>Motorways and vignettes</option>
+                <option value='crossShore'>Cross shore</option>
+                <option value='park'>Park</option>
+            </select>
+        </form>
+        <div id='labels-container'>
+            <label>Legend</label>
+            <div id='route-labels'></div>
+        </div>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var previousScenarioRoutes = [],
+                scenarioInput = document.getElementById('scenario'),
+                routeLabelsDiv = document.getElementById('route-labels'),
+                scenarioConfig = {
+                    'crossCountry': {
+                        sectionTypes: ['COUNTRY'],
+                        locations: '48.857,2.354:52.5222,13.4159:51.75905,19.4586'
+                    },
+                    'motorwayVignette': {
+                        sectionTypes: ['MOTORWAY', 'TOLL_ROAD', 'TOLL_VIGNETTE'],
+                        locations: '50.078294547389454,14.161376953125:51.82219818336938,19.4677734375:54.278054859672835,18.544921875000004'
+                    },
+                    'crossShore': {
+                        sectionTypes: ['FERRY', 'TUNNEL'],
+                        locations: '50.224826,1.753280:51.257478,-0.083755:49.611379,-1.657582'
+                    },
+                    'park': {
+                        sectionTypes: ['PEDESTRIAN', 'TRAVEL_MODE'],
+                        locations: '51.49388910878061,-0.04856944084167481:51.49499793428775,-0.05478143692016602:51.49525175801964,-0.05581140518188477'
+                    }
+                },
+                sectionConfig = {
+                    'CAR_TRAIN': {
+                        color: '#5fb935',
+                        name: 'Car/Train',
+                        value: 'carTrain'
+                    },
+                    'COUNTRY': {
+                        color: '#f06368',
+                        name: 'Country',
+                        value: 'country'
+                    },
+                    'FERRY': {
+                        color: '#7b1ab4',
+                        name: 'Ferry',
+                        value: 'ferry'
+                    },
+                    'MOTORWAY': {
+                        color: '#21af9d',
+                        name: 'Motorway',
+                        value: 'motorway'
+                    },
+                    'PEDESTRIAN': {
+                        color: '#b451a0',
+                        name: 'Pedestrian',
+                        value: 'pedestrian'
+                    },
+                    'TOLL_ROAD': {
+                        color: '#f77a03',
+                        name: 'Toll road',
+                        value: 'tollRoad'
+                    },
+                    'TOLL_VIGNETTE': {
+                        color: '#975fd7',
+                        name: 'Toll Vignette',
+                        value: 'tollVignette'
+                    },
+                    'TRAVEL_MODE': {
+                        color: '#f77a03',
+                        name: 'Car',
+                        value: 'travelMode'
+                    },
+                    'TUNNEL': {
+                        color: '#70ce6d',
+                        name: 'Tunnel',
+                        value: 'tunnel'
+                    }
+                },
+                countryConfig = {
+                    'FRA': {
+                        color: '#f77a03',
+                        name: 'France'
+                    },
+                    'DEU': {
+                        color: '#20e3e5',
+                        name: 'Germany'
+                    },
+                    'POL': {
+                        color: '#f06368',
+                        name: 'Poland'
+                    },
+                    'BEL': {
+                        color: '#61ea6f',
+                        name: 'Belgium'
+                    }
+                };
+
+            // Setting TomTom keys
+            tomtom.key('${api.key}');
+            tomtom.routingKey('${api.key.routing}');
+
+            // Creating map
+            var map = tomtom.map('map', {
+                    source: 'vector',
+                    basePath: '${base.path}'
+                }),
+                loader = document.getElementById('loader');
+
+            map.zoomControl.setPosition('bottomright');
+
+            // Adds the control panel to the map
+            tomtom.controlPanel({
+                position: 'topleft',
+                title: null,
+                show: null,
+                close: null,
+                collapsed: false,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('map').nextElementSibling);
+
+            // Adds the panel for route summary
+            tomtom.controlPanel({
+                position: 'topright',
+                collapsed: false,
+                close: null,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('labels-container'));
+
+            function routing(locations) {
+                return tomtom.routing().locations(locations);
+            }
+
+            function calculateRoute() {
+                var routeRequest, selectedTypes;
+                try {
+                    removeAllLayers();
+                    showLoader();
+
+                    selectedTypes = scenarioConfig[scenarioInput.value].sectionTypes.map(function(st) {
+                        return sectionConfig[st].value;
+                    }).join(',');
+
+                    routeRequest = routing(scenarioConfig[scenarioInput.value].locations);
+                    routeRequest.sectionType(selectedTypes);
+
+                    // In the 'park' scenario we request pedestrian and travelMode sections, in order to receive
+                    // travelMode sections, a travelMode must be specified as we do below
+                    if (scenarioInput.value === 'park') {
+                        routeRequest.travelMode('car');
+                    }
+                    routeRequest.go()
+                        .then(function(routeJson) {
+                            var sectionData;
+                            var route = drawRouteOnMap(routeJson);
+
+                            sectionData = parseSectionsData(routeJson);
+                            drawSections(sectionData);
+                            updateRouteLegend(sectionData.sectionTypes, sectionData.countries);
+                            document.querySelector('.leaflet-top.leaflet-right').classList.add('visible');
+
+                            map.fitBounds(route.getBounds());
+                            hideLoader();
+                        })
+                        .catch(handleError);
+                } catch (error) {
+                    handleError(error);
+                }
+            }
+
+            function parseSectionsData(routeJson) {
+                var sectionIndexes = routeJson.features[0].properties.sections,
+                    sectionPoints = [],
+                    coordinates = [].concat.apply([], routeJson.features[0].geometry.coordinates),
+                    uniqueSectionHelper = {},
+                    uniqueCountryHelper = {},
+                    sectionTypes = [],
+                    countries = [],
+                    i;
+
+                // extract sections from the main route    
+                for (i = 0; i < sectionIndexes.length; i++) {
+
+                    // for the 'park' scenario we are requesting travelMode and pedestrian sections using car travelMode,
+                    // as part of the route is in a park, the travelMode section reports a section called 'other'
+                    // because it is not reachable by car. In this case it is exactly the same as the 
+                    // reported pedestrian section, therefore we can ignore it
+                    if (sectionIndexes[i].travelMode === 'other') {
+                        continue;
+                    }
+
+                    sectionPoints.push({
+                        points: coordinates.slice(sectionIndexes[i].startPointIndex, sectionIndexes[i].endPointIndex + 1),
+                        sectionType: sectionIndexes[i].sectionType,
+                        countryCode: sectionIndexes[i].countryCode
+                    });
+
+                    // extract existent section types
+                    if (!uniqueSectionHelper[sectionIndexes[i].sectionType]) {
+                        sectionTypes.push(sectionIndexes[i].sectionType);
+                        uniqueSectionHelper[sectionIndexes[i].sectionType] = true;
+                    }
+
+                    // extract existent countries
+                    if (sectionIndexes[i].countryCode && !uniqueSectionHelper[sectionIndexes[i].countryCode]) {
+                        countries.push(sectionIndexes[i].countryCode);
+                        uniqueCountryHelper[sectionIndexes[i].countryCode] = true;
+                    }
+                }
+
+                return {
+                    sectionPoints: sectionPoints,
+                    sectionTypes: sectionTypes,
+                    countries: countries
+                };
+            }
+
+            function drawSections(sectionData) {
+                var i, strokeWidth = 10, sectionStrokeWidth = {};
+                for (i = 0; i < sectionData.sectionTypes.length; i++) {
+                    sectionStrokeWidth[sectionData.sectionTypes[i]] = strokeWidth - 2;
+                }
+
+                for (i = 0; i < sectionData.sectionPoints.length; i++) {
+                    var sectionLine = convertToLineGeoJson(sectionData.sectionPoints[i].points),
+                        sStokeWitdh = sectionStrokeWidth[sectionData.sectionPoints[i].sectionType],
+                        color;
+
+                    if (sectionData.sectionPoints[i].sectionType === 'COUNTRY') {
+                        color = countryConfig[sectionData.sectionPoints[i].countryCode].color;
+                    } else {
+                        color = sectionConfig[sectionData.sectionPoints[i].sectionType].color;
+                    }
+
+                    drawRouteOnMap(sectionLine, color, sStokeWitdh, 0.7);
+                }
+            }
+
+            function drawRouteOnMap(routeJson, color, strokeWidth, opacity) {
+                var route = tomtom.L.geoJson(routeJson, {
+                    style: function() {
+                        return {
+                            weight: strokeWidth || 3,
+                            color: color || '#00d7ff',
+                            opacity: opacity || 0.8
+                        };
+                    }
+                }).addTo(map);
+                previousScenarioRoutes.push(route);
+                return route;
+            }
+
+            function removeAllLayers() {
+                previousScenarioRoutes.forEach(function(layer) {
+                    map.removeLayer(layer);
+                });
+            }
+
+            function convertToLineGeoJson(points) {
+                return {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: points
+                    }
+                };
+            }
+
+            function updateRouteLegend(sectionTypes, countries) {
+                var i, div, elements, config;
+                routeLabelsDiv.innerText = '';
+                elements = sectionTypes.indexOf('COUNTRY') === -1 ? sectionTypes : countries;
+                config = sectionTypes.indexOf('COUNTRY') === -1 ? sectionConfig : countryConfig;
+
+                for (i = 0; i < elements.length; i++) {
+                    div = document.createElement('div');
+                    div.style.borderLeftColor = config[elements[i]].color;
+                    div.colorHex = config[elements[i]].color;
+                    div.innerText = config[elements[i]].name;
+                    routeLabelsDiv.appendChild(div);
+                }
+            }
+
+            function showLoader() {
+                loader.style.display = 'block';
+                scenarioInput.disabled = true;
+            }
+
+            function hideLoader() {
+                loader.style.display = 'none';
+                scenarioInput.disabled = false;
+            }
+
+            function handleError(error) {
+                var message = error && error.message || (error.error && error.error.description) || 'Error occurred';
+                hideLoader();
+                tomtom.messageBox({closeAfter: 3000}).setContent(message).openOn(map);
+            }
+
+            function animatePathOnHover(e) {
+                if (e.target.style.borderLeftColor) {
+                    var paths = document.querySelectorAll('#map path[stroke=\'' + e.target.colorHex + '\']');
+                    for (var i = 0; i < paths.length; i++) {
+                        if (document.documentMode) { // IE
+                            if (e.type === 'mouseover') {
+                                paths[i].setAttribute('class', 'leaflet-interactive animate');
+                            } else {
+                                paths[i].setAttribute('class', 'leaflet-interactive');
+                            }
+                        } else { //Other browsers
+                            paths[i].classList[e.type === 'mouseover' ? 'add' : 'remove']('animate');
+                        }
+                    }
+                }
+            }
+
+            routeLabelsDiv.onmouseover = animatePathOnHover;
+            routeLabelsDiv.onmouseout = animatePathOnHover;
+
+            scenarioInput.onchange = calculateRoute;
+            calculateRoute();
+        })(tomtom);
+    </script>
+</body>
+</html>

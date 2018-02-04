@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map with traffic incidents list</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+
+    <script type='text/javascript' src='https://cdn.rawgit.com/jasonmoo/t.js/master/t.min.js'></script>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        .map-container {
+            margin-left: 40%;
+            width: 60%;
+        }
+
+        .container {
+            min-height: 600px;
+        }
+
+        #example {
+            height: 600px;
+        }
+
+        hr {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body class='use-all-space'>
+    <div class='container use-all-space'>
+        <div class='traffic-incidents-list-container'>
+            <table id='trafficIncidentsList' cellspacing='0' width='100%' class='hover'>
+                <thead>
+                    <tr>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+        <div class='map-container use-all-space'>
+            <div id='map' class='use-all-space'></div>
+        </div>
+    </div>
+    <script id='headersTemplate' type='t/template'>
+        <th>
+            <div class='headerContainer clickable-header'>
+                <span>{{=name}}</span> {{sortable}}
+                <div class='arrows'>
+                    <div class='arrow-up'></div>
+                    <div class='arrow-down'></div>
+                </div>
+                {{:sortable}} {{/sortable}}
+            </div>
+        </th>
+    </script>
+    <script id='incidentsListRowTemplate' type='t/template'>
+        <td>
+            <div class='traffic-icon'>
+                <div class='icon-circle-{{=incidentSeverity}}'>
+                    <div class='{{=icon}} traffic-incidents-list-icon'>{{=incidentsNo}}</div>
+                </div>
+            </div>
+        </td>
+        <td>
+            <b>{{=roadNumber}}</b>
+            <div>{{=from}}</div>
+            <div>{{=to}}</div>
+        </td>
+        <td class='traffic-incidents-list-number-cell'>{{=delay}}</td>
+        <td class='traffic-incidents-list-number-cell'>{{=length}}</td>
+    </script>
+    <script id='noTrafficRowTemplate' type='t/template'>
+        <td valign='top' colspan='4' class='empty-row'><b>No data for this view, try to move or zoom...</b></td>
+        <td></td>
+        <td></td>
+        <td></td>
+    </script>
+    <script>
+        
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Prepare a map and TomTom keys
+        var map = tomtom.map('map', {
+            key: '${api.key}',
+            source: ['raster'],
+            traffic: {
+                style: 's3', key: '${api.key.traffic}',
+                trafficService: {
+                    preserveCluster: true,
+                    expandCluster: true,
+                    language: 'en-GB'
+                },
+                createPopupForCluster: true,
+                minZoom: 10
+            },
+            center: [51.759445, 19.457216],
+            zoom: 10
+        });
+        
+
+        var trafficIncidentsListData, trafficLayer, trafficIncidentsLayer,
+            popupOpenerTimeoutHandler, emptyField = '----';
+
+        var trafficIncidentsListBody = document.querySelector('#trafficIncidentsList tbody');
+        var rowTemplate = new t(document.getElementById('incidentsListRowTemplate').innerHTML);
+        var noTrafficRowTemplateContent = new t(document.getElementById('noTrafficRowTemplate').innerHTML).render();
+
+        var tableHeaders = document.querySelector('#trafficIncidentsList thead tr');
+        var headersTemplate = new t(document.getElementById('headersTemplate').innerHTML);
+        var headersDefinitions = [
+            { name: '' },
+            { name: 'Incidents', sortable: true },
+            { name: 'Delay', sortable: true },
+            { name: 'Length', sortable: true }
+        ];
+
+        var columnName, sortDirection;
+        
+        // Handling new incidents data
+        L.MapUtils.findLayersByName('trafficIncidents', map)[0].on(L.TomTomTrafficIncidentsLayer.Events.TRAFFIC_INCIDENTS_RECEIVED, function(event) {
+            trafficIncidentsListData = [];
+            trafficIncidentsListData = event.data.features.map(function(feature, index) {
+                return buildTrafficListRow(feature, event.layers[index]);
+            });
+            if (columnName && sortDirection) {
+                trafficIncidentsListData.sort(compareBuilder(columnName, sortDirection));
+            }
+            renderTrafficIncidentsList();
+        });
+        
+
+        map.on('zoom', function() {
+            var currentZoom = map.getZoom();
+            if (currentZoom < 10 && !trafficLayer) {
+                trafficLayer = L.MapUtils.findLayersByName('traffic', map)[0];
+                trafficIncidentsLayer = L.MapUtils.findLayersByName('trafficIncidents', map)[0];
+                map.removeLayer(trafficLayer);
+                trafficIncidentsLayer.clearLayers();
+                map.removeLayer(trafficIncidentsLayer);
+                trafficIncidentsListData = [];
+                renderTrafficIncidentsList();
+            } else if (currentZoom >= 10 && trafficLayer) {
+                map.addLayer(trafficLayer);
+                map.addLayer(trafficIncidentsLayer);
+                trafficLayer = null;
+                trafficIncidentsLayer = null;
+            }
+        });
+
+        function getPropertyAsText(property, defaultValue) {
+            return property ? property : (defaultValue === undefined ? emptyField : defaultValue); // eslint-disable-line
+        }
+
+        function changeSizeOfIcon(layer, newIconSize) {
+            var newScale = 'scale(' + newIconSize + ')';
+            var container = layer.options.icon.container;
+
+            if (/scale/.test(container.style.transform)) {
+                container.style.transform = container.style.transform.replace(/scale\(.+\)?/, newScale);
+            } else {
+                container.style.transform = container.style.transform + ' ' + newScale;
+            }
+
+            container.style['margin-left'] = (parseInt(container.style.height) / -2) * newIconSize + 'px';
+            container.style['margin-right'] = (parseInt(container.style.width) / -2) * newIconSize + 'px';
+        }
+
+        function formatTime(timeInSec) {
+            if (!timeInSec) {
+                return emptyField;
+            }
+
+            var mins = parseInt(timeInSec / 60);
+            var sec = timeInSec % 60;
+            if (mins) {
+                var result = String(mins);
+                if (sec) {
+                    result += ':' + (sec < 10 ? '0' + sec : sec);
+                }
+                return result + ' min';
+            } else {
+                return sec + ' s';
+            }
+        }
+
+        function formatLength(lengthInMeters) {
+            if (!lengthInMeters) {
+                return emptyField;
+            }
+
+            if (lengthInMeters > 1000) {
+                return (lengthInMeters / 1000).toPrecision(3) + ' km';
+            }
+            return lengthInMeters + ' m';
+        }
+
+        function getDelay(feature) {
+            var finalDelay = 0, features, featureDelay;
+            if (isClusteredFeature(feature)) {
+                features = feature.properties.features;
+                for (var i = 0; i < features.length; ++i) {
+                    featureDelay = features[i].properties.delaySeconds ? features[i].properties.delaySeconds : 0;
+                    finalDelay += featureDelay;
+                }
+            } else {
+                featureDelay = feature.properties.delaySeconds ? feature.properties.delaySeconds : 0;
+                finalDelay = featureDelay;
+            }
+            return finalDelay;
+        }
+
+        function isClusteredFeature(feature) {
+            return Boolean(feature.properties.features);
+        }
+
+        function prepareRowData(feature, layer) {
+            var mainFeatureProperties = feature.properties;
+            if (isClusteredFeature(feature)) {
+                mainFeatureProperties = feature.properties.features[0].properties;
+            }
+
+            var icon = layer.options.icon.options.icon ? layer.options.icon.options.icon.icon : '';
+            var rawDelay = getDelay(feature);
+            return {
+                icon: icon,
+                rawDelay: rawDelay,
+                delay: getPropertyAsText(formatTime(rawDelay)),
+                rawLength: feature.properties.lengthMeters,
+                length: getPropertyAsText(formatLength(feature.properties.lengthMeters)),
+                incidentSeverity: feature.properties.incidentSeverity || 'unknown',
+                from: mainFeatureProperties.from,
+                to: mainFeatureProperties.to,
+                roadNumber: mainFeatureProperties.roadNumber,
+                incidentsNo: isClusteredFeature(feature) ? feature.properties.features.length : ''
+            };
+        }
+
+        
+        // Build a row in the table
+        function buildTrafficListRow(feature, layer) {
+            var rowData = prepareRowData(feature, layer);
+            var rowContent = rowTemplate.render(rowData);
+            var row = document.createElement('tr');
+            row.innerHTML = rowContent;
+
+            row.addEventListener('mouseover', function() {
+                changeSizeOfIcon(layer, 2);
+                if (layer._popup) {
+                    if (popupOpenerTimeoutHandler) {
+                        clearTimeout(popupOpenerTimeoutHandler);
+                    }
+                    popupOpenerTimeoutHandler = setTimeout(function() {
+                        layer.openPopup();
+                    }, 500);
+                }
+            });
+
+            row.addEventListener('mouseout', function() {
+                changeSizeOfIcon(layer, 1);
+                if (popupOpenerTimeoutHandler) {
+                    clearTimeout(popupOpenerTimeoutHandler);
+                    popupOpenerTimeoutHandler = null;
+                }
+            });
+
+            
+            row.addEventListener('click', function() {
+                layer.openPopup();
+            });
+
+            layer.on('popupopen', function() {
+                row.style.backgroundColor = 'lightgrey';
+            });
+            layer.on('popupclose', function() {
+                row.style.backgroundColor = '';
+            });
+            
+            return { row: row, data: rowData };
+        }
+        
+
+        
+        // Render the list
+        function renderTrafficIncidentsList() {
+            var noTrafficRow;
+            trafficIncidentsListBody.innerHTML = '';
+
+            if (trafficIncidentsListData && trafficIncidentsListData.length > 0) {
+                if (!tableHeaders.innerText) {
+                    buildHeaders();
+                }
+
+                trafficIncidentsListData.forEach(function(item) {
+                    trafficIncidentsListBody.appendChild(item.row);
+                });
+            } else {
+                tableHeaders.innerHTML = '';
+                noTrafficRow = document.createElement('tr');
+                noTrafficRow.innerHTML = noTrafficRowTemplateContent;
+                trafficIncidentsListBody.appendChild(noTrafficRow);
+            }
+        }
+
+        // Comparator used when sorting results
+        function compareBuilder(columnName, direction) {
+            var modifier = direction === 'asc' ? 1 : -1;
+            return function(a, b) {
+                if (typeof a.data[columnName] === 'string') {
+                    return modifier * a.data[columnName].localeCompare(b.data[columnName]);
+                }
+                return modifier * (a.data[columnName] - b.data[columnName]);
+            };
+        }
+        
+
+        
+        // Clickable table headers
+        function buildHeaders() {
+            while (tableHeaders.firstChild) {
+                tableHeaders.removeChild(tableHeaders.firstChild);
+            }
+
+            tableHeaders.innerHTML = headersDefinitions.map(function(item) {
+                return headersTemplate.render(item);
+            }).join(' ');
+
+            var headers = document.querySelectorAll('#trafficIncidentsList th');
+
+            Array.prototype.forEach.call(headers, function(header) {
+
+                header.addEventListener('click', function() {
+                    switch (this.innerText.trim()) {
+                    case 'Incidents': columnName = 'from'; break;
+                    case 'Delay': columnName = 'rawDelay'; break;
+                    case 'Length': columnName = 'rawLength'; break;
+                    }
+                    var arrowsContainer = this.querySelector('.arrows');
+                    if (arrowsContainer) {
+                        sortDirection = arrowsContainer.classList.contains('sorting-asc') ? 'asc' : 'desc';
+                        if (sortDirection === 'asc') {
+                            arrowsContainer.classList.remove('sorting-asc');
+                            arrowsContainer.classList.add('sorting-desc');
+                        } else {
+                            arrowsContainer.classList.add('sorting-asc');
+                            arrowsContainer.classList.remove('sorting-desc');
+                        }
+                        trafficIncidentsListData.sort(compareBuilder(columnName, sortDirection));
+                        renderTrafficIncidentsList();
+                    }
+                });
+            });
+        }
+        
+
+    </script>
+</body>
+
+</html>

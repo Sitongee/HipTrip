@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Draggable marker</title>
+    <meta name='viewport'
+          content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var map, marker;
+        // Setting TomTom keys
+        tomtom.key('${api.key}');
+        tomtom.searchKey('${api.key.search}');
+
+        //Creating the map
+        map = tomtom.map('map', {
+            source: 'vector',
+            basePath: '${base.path}'
+        }).setView([52.373154, 4.890659], 14);
+
+        // Adding marker to the map
+        marker = tomtom.L.marker([52.373154, 4.890659], {
+            draggable: true
+        }).bindPopup('Amsterdam').addTo(map);
+
+        // Show popup each time the marker is moved
+        marker.on('dragend', function(e) {
+            tomtom.reverseGeocode({position: e.target.getLatLng()})
+                .go(function(response) {
+                    if (response && response.address && response.address.freeformAddress) {
+                        marker.setPopupContent(response.address.freeformAddress);
+                    } else {
+                        marker.setPopupContent('No results found');
+                    }
+                    marker.openPopup();
+                });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing alternatives with deviation constraints</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        #deviation-inputs {
+            width: 235px;
+            min-width: 190px;
+        }
+        #deviation-inputs input {
+            margin-left: 5px;
+            margin-bottom: 8px;
+        }
+        #results-list-container label{
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='loader' class='loader loader-center'></div>
+        <div id='map' class='use-all-space'></div>
+        <form class='sidepanel' id='deviation-inputs'>
+            <div class='sidepanel-input-group' title='Min deviation time used for alternative route'>
+                <input id='minDevTime' type='range' value='0' step='1' min='0' max='1000' oninput="this.form.minDevTimeLabel.value = ' Min. Deviation Time(s): ' + this.value"
+                />
+                <output id='minDevTimeLabel'>Min. Deviation Time(s): 0</output>
+            </div>
+
+            <div class='sidepanel-input-group' title='Min deviation distance used for alternative route'>
+                <input id='minDevDistance' type='range' value='0' step='1' min='0' max='1000' oninput="this.form.minDevDistanceLabel.value = ' Min. Deviation Distance(m): ' + this.value"
+                />
+                <output id='minDevDistanceLabel'>Min. Deviation Distance(m): 0</output>
+            </div>
+
+            <div class='sidepanel-input-group' title='Number of alternatives displayed'>
+                <input type='number' id='alternatives' name='alternatives' min='0' max='5' value='1'/>
+                <output id='alternativesLabel'>Alternatives</label>
+                </div>
+
+            <input id='submit' type='submit' value='Submit'>
+        </form>
+    </div>
+    <script>
+        (function(tomtom) {
+            // Define your product name and version
+            tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+            var route;
+
+            
+            // Setting TomTom keys
+            tomtom.key('${api.key}');
+            tomtom.routingKey('${api.key.routing}');
+
+            // Creating map
+            var map = tomtom.map('map', {
+                    source: 'vector',
+                    basePath: '${base.path}'
+                }),
+                alternativesInput = document.getElementById('alternatives'),
+                minDevTimeInput = document.getElementById('minDevTime'),
+                minDevDistanceInput = document.getElementById('minDevDistance'),
+                loader = document.getElementById('loader'),
+                submitButton = document.getElementById('submit'),
+                colors = ['#00D7FF', '#FF0000', '#4AF046', '#000000', '#FF00D2', '#FFFF00'];
+            
+
+            map.zoomControl.setPosition('bottomright');
+
+            // Add the control panel to the map
+            tomtom.controlPanel({
+                position: 'topleft',
+                title: null,
+                show: null,
+                close: null,
+                collapsed: false,
+                closeOnMapClick: false
+            })
+                .addTo(map)
+                .addContent(document.getElementById('map').nextElementSibling);
+
+            var routeResultsPanel = tomtom.controlPanel({
+                position: 'topright',
+                collapsed: false,
+                close: null,
+                closeOnMapClick: false
+            });
+            routeResultsPanel.addTo(map);
+
+            function showLoader() {
+                loader.style.display = 'block';
+                submitButton.disabled = true;
+            }
+
+            function hideLoader() {
+                loader.style.display = 'none';
+                submitButton.disabled = false;
+            }
+
+            
+            // Perform a request
+            function calculateRoute() {
+                var colorIndex = 0;
+                try {
+                    map.closePopup();
+                    showLoader();
+                    if (route) {
+                        map.removeLayer(route);
+                    }
+                    tomtom.routing()
+                        .maxAlternatives(parseInt(alternativesInput.value))
+                        .locations('40.10995732392718,-8.501433134078981:40.209408,-8.423741')
+                        .supportingPoints('40.10995732392718,-8.501433134078981:40.11115121590874,-8.500000834465029:' +
+                            '40.11089684892725,-8.497683405876161:40.11192251642396,-8.498423695564272:40.209408,-8.423741')
+                        .minDeviationTime(parseInt(minDevTimeInput.value))
+                        .minDeviationDistance(parseInt(minDevDistanceInput.value))
+                        .go()
+                        .then(function(routeJson) {
+                            var routeSummary = routeJson.features[0].properties.summary;
+                            setFormMaxValues(routeSummary.travelTimeInSeconds, routeSummary.lengthInMeters);
+                            route = tomtom.L.geoJson(routeJson, {
+                                onEachFeature: bindPopups,
+                                style: function() {
+                                    return {
+                                        weight: colorIndex === 0 ? 6 : 3,
+                                        color: colors[colorIndex++],
+                                        opacity: 0.8
+                                    };
+                                }
+                            }).addTo(map);
+                            createResults(routeSummary);
+                            map.fitBounds(route.getBounds());
+                            hideLoader();
+                        })
+                        .catch(handleError);
+                } catch (error) {
+                    handleError(error);
+                }
+            }
+            
+
+            function setFormMaxValues(minDevTimeMax, minDevDistanceMax) {
+                minDevTimeInput.max = minDevTimeMax;
+                minDevDistanceInput.max = minDevDistanceMax;
+            }
+
+            function bindPopups(feature, layer) {
+                layer.on('click', function(e) {
+                    L.popup()
+                        .setLatLng(e.latlng)
+                        .setContent(buildRouteSummaryMessage(feature.properties.summary))
+                        .openOn(map);
+                });
+            }
+
+            function buildRouteSummaryMessage(summary) {
+                return [
+                    '<div><label>Travel distance:</label> ' + tomtom.unitFormatConverter.formatDistance(summary.lengthInMeters) + '</div>',
+                    '<div><label>Travel time:</label> ' + tomtom.unitFormatConverter.formatTime(summary.travelTimeInSeconds) + '</div>'
+                ].join('');
+            }
+
+            function createResults(routeSummary) {
+                var container = document.createElement('div');
+                container.id = 'results-list-container';
+                container.innerHTML = buildRouteSummaryMessage(routeSummary);
+                routeResultsPanel.setContent(container);
+            }
+
+            
+            function onSubmit(e) {
+                e.preventDefault();
+                calculateRoute();
+            }
+            
+
+            function handleError(error) {
+                var message = error && error.message || (error.error && error.error.description) || 'Error occured';
+                hideLoader();
+                tomtom.messageBox({closeAfter: 3000}).setContent(message).openOn(map);
+            }
+
+            
+            document.getElementById('submit').onclick = onSubmit;
+            calculateRoute();
+            
+        })(tomtom);
+    </script>
+</body>
+</html>

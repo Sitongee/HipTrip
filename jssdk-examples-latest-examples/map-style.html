@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label.disabled,
+        label.warning {
+            opacity: 0.5;
+        }
+        label.disabled ~ label.warning {
+            display: flex;
+            font-size: xx-small;
+            justify-content: center;
+        }
+        .warning {
+            display: none;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+        <div>
+            <label for='map_style'>
+                Style
+                <select id='map_style' name='map_style'>
+                    <option value='main'>main</option>
+                    <option value='night'>night</option>
+                </select>
+            </label>
+            <label for='map_layer'>
+                Layer
+                <select id='map_layer' name='map_layer'>
+                    <option value='basic'>basic</option>
+                    <option value='hybrid'>hybrid</option>
+                    <option value='labels'>labels</option>
+                </select>
+            </label>
+            <label for='baseLayer'>
+                Base Layer
+               <select id='baseLayer' name='baseLayer' autocomplete='off'></select>
+            </label>
+        </div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        tomtom.key('${api.key}');
+        var map = tomtom.map('map', {
+            key: '${api.key}',
+            source: ['vector', 'raster'],
+            basePath: '${base.path}',
+            vector: {
+                fallback: 'raster' //in case WebGL is not supported in browser
+            },
+            center: [51.94426, 6.61377],
+            zoom: 6
+        });
+
+        var languageLabel = L.DomUtil.create('label');
+        languageLabel.innerHTML = 'Map language';
+        var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'maps');
+        languageLabel.appendChild(languageSelector);
+        var languageWarning = L.DomUtil.create('label', 'warning');
+        languageWarning.innerHTML = 'Language selection is only possible for vector map tiles.';
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(languageLabel)
+            .addContent(languageWarning);
+
+        tomtom.controlPanel({
+            position: 'topright',
+            title: null,
+            collapsed: false,
+            closeOnMapClick: false,
+            close: null,
+            show: null
+        })
+            .addTo(map)
+            .addContent(document.getElementById('map').nextElementSibling);
+
+        function updateBaseLayer() {
+            var selectedOption = document.getElementById('baseLayer').value || 'raster';
+            var baseLayers = map.getBaseLayers();
+
+            if (selectedOption === 'raster') {
+                map.addLayer(baseLayers.raster);
+                map.removeLayer(baseLayers.vector);
+                languageSelector.parentElement.classList.add('disabled');
+                languageSelector.disabled = true;
+            } else if (selectedOption === 'vector') {
+                map.addLayer(baseLayers.vector);
+                map.removeLayer(baseLayers.raster);
+                languageSelector.parentElement.classList.remove('disabled');
+                languageSelector.disabled = false;
+            }
+        }
+
+        function updateLayersOptions(key) {
+            return function() {
+                var option = {};
+                option[key] = this.value;
+                map.updateLayersOptions(option);
+            };
+        }
+
+        document.getElementById('map_style').onchange = updateLayersOptions('style');
+        document.getElementById('map_layer').onchange = updateLayersOptions('layer');
+        document.getElementById('baseLayer').onchange = updateBaseLayer;
+        (function initializeTileSwitcher() {
+            var select = document.getElementById('baseLayer');
+            var layers = map.getBaseLayers();
+
+            function newOption(value, label, selected) {
+                var option = document.createElement('option');
+                option.value = value;
+                option.text = label;
+                if (selected) {
+                    option.selected = 'selected';
+                }
+                return option;
+            }
+
+            layers.raster && select.appendChild(newOption('raster', 'Raster'));
+            layers.vector && select.appendChild(newOption('vector', 'Vector', 'selected'));
+        })();
+    </script>
+</body>
+</html>

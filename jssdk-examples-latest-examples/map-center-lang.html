@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Setting map center based on user's language code</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        function getUserCountryCode() {
+            var userLanguage = window.navigator.userLanguage ||
+                (window.navigator.languages ? window.navigator.languages[0] : null) ||
+                window.navigator.language;
+            return userLanguage.replace(/[^-]+-/, '').toLowerCase();
+        }
+
+        var views = {
+            pl: {center: [52.23789, 21.00586], zoom: 13},
+            de: {center: [52.53293, 13.40881], zoom: 12},
+            nl: {center: [52.3756, 4.88411], zoom: 12},
+            gb: {center: [51.50062, -0.12497], zoom: 11},
+            us: {center: [38.89745, -77.04163], zoom: 10},
+            be: {center: [50.84887, 4.35059], zoom: 12},
+            fr: {center: [48.86291, 2.34833], zoom: 11},
+            // ... any other location you need
+            default: {center: [52.379189, 4.899431], zoom: 12}
+        };
+        var countryCode = getUserCountryCode();
+        var view = views.hasOwnProperty(countryCode) ? views[countryCode] : views.default;
+
+        tomtom.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        }).setView(view.center, view.zoom);
+    </script>
+</body>
+</html>

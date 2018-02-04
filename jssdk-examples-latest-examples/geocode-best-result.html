@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <div id='tomtom-example-inputs' class='sidepanel'>
+            <h4>Geocode best-result parameters</h4>
+            <form onsubmit='return false'>
+                <div id='tomtom-example-inputsWrapper'>
+                    <div id='langParam' class='sidepanel-input-group'>
+                        <label>Language</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='text' id='query' name='query' placeholder='Query string' pattern='.+'
+                            title='this field is required' required>
+                        <label for='query'>Query</label>
+                    </div>
+                </div>
+                <input type='submit' id='tomtom-example-submit' value='Submit'/>
+            </form>
+        </div>
+        <div id='map' class='flex-expand'></div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Setting TomTom keys
+        tomtom.searchKey('${api.key.search}');
+
+        // Creating map
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        var languageSelector = tomtom.languageSelector.getHtmlElement(new tomtom.localeService(), 'search');
+        var langParam = document.getElementById('langParam');
+        langParam.insertBefore(languageSelector, langParam.firstChild);
+
+        var marker;
+
+        document.getElementById('tomtom-example-submit').onclick = function() {
+            if (marker) {
+                map.removeLayer(marker);
+            }
+            tomtom.geocode(getOptions()).bestResult(true).go(function(geoResponse) {
+                if (geoResponse) {
+                    marker = tomtom.L.marker([geoResponse.position.lat, geoResponse.position.lon]).addTo(map)
+                        .bindPopup(geoResponse.address.freeformAddress).openPopup();
+                    if (geoResponse.viewport) {
+                        map.fitBounds([geoResponse.viewport.topLeftPoint, geoResponse.viewport.btmRightPoint]);
+                    } else {
+                        map.setView(marker.getLatLng(), 13, {animate: true});
+                    }
+
+                } else {
+                    tomtom.messageBox({closeAfter: 1500}).setContent('No results found.').openOn(map);
+                }
+            });
+        };
+
+        /*
+         * Gets entered options from form fields
+         */
+        function getOptions() {
+            var wrapper = document.getElementById('tomtom-example-inputsWrapper');
+            var inputs = wrapper.getElementsByTagName('input');
+            var options = {unwrapBbox: true};
+            for (var i = 0; i < inputs.length; i += 1) {
+                var input = inputs[i];
+                if (input.name && input.value && (input.type !== 'radio' || input.checked)) {
+                    options[input.name] = input.value;
+                }
+            }
+
+            var selectedLangCode = languageSelector.options[languageSelector.selectedIndex].value;
+
+            options.language = selectedLangCode;
+            options.lat = map.getCenter().lat;
+            options.lon = map.getCenter().lng;
+            return options;
+        }
+    </script>
+</body>
+</html>

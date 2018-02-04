@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html class="use-all-space">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href="sdk/map.css"/>
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href="assets/css/tomtom2.css">
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class="use-all-space">
+    <div class="flex-horizontal use-all-space">
+        <div id='tomtom-example-inputs' class="sidepanel">
+            <h4>Reverse geocode parameters</h4>
+            <form onsubmit='return false'>
+                <div id='tomtom-example-inputsWrapper' class='scrollbar'>
+                    <div class='sidepanel-input-group'>
+                        <input type='text' id='position' name='position'
+                            placeholder='Comma or space separated string composed by lat, lon'
+                            pattern='((-?\d*(\.\d+)?)[, ]+)(-?\d*(\.\d+)?)'
+                            title='must contain position value, e.g.: 37.553,-122.453' required/>
+                        <label for='position'>Position</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='range' id='radius' name='radius' min='0' max='100000' value='10000' />
+                        <label id='radiusAmount' for='radius'>Radius (10000 m)</label>
+                    </div>
+                </div>
+                <input type='submit' id='tomtom-example-submit' value='Submit'/>
+            </form>
+        </div>
+        <div id='map' class="flex-expand"></div>
+    </div>
+    <script>
+        // Setting TomTom keys
+        tomtom.searchKey('${api.key.search}');
+
+        // Creating map
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        var marker,
+            positionElement = document.getElementById('position'),
+            radiusElement = document.getElementById('radius'),
+            radiusAmountElement = document.getElementById('radiusAmount');
+
+        document.getElementById('tomtom-example-submit').onclick = function() {
+            tomtom.reverseGeocode().position(positionElement.value).radius(radiusElement.value).go(function(geoResponse) {
+                drawMarkerOnMap(geoResponse, positionElement.value, 14);
+            });
+        };
+
+        /*
+         * Adds first marker
+         */
+        marker = tomtom.L.marker([50.8515, 4.3705]).addTo(map).bindPopup('Click anywhere on the map to get its address.').openPopup();
+        map.setView([50.8515, 4.3705], 13);
+
+        /*
+         * Manages clicks on the map (showing marker with full address in the clicked place on the map)
+         */
+        map.on('click', function(event) {
+            var position = event.latlng;
+            tomtom.reverseGeocode().position(position).radius(radiusElement.value).go(function(geoResponse) {
+                drawMarkerOnMap(geoResponse, position);
+            });
+        });
+
+        function drawMarkerOnMap(geoResponse, position, zoom) {
+            var popupContent;
+            if (typeof position === 'string') {
+                position = position.split(/[, ]+/);
+            } else if (position === undefined) {
+                position = [0, 0];
+            }
+            if (geoResponse) {
+                popupContent = geoResponse.address.freeformAddress || 'Cannot get free-form address.';
+            } else {
+                popupContent = 'Cannot find given location.</br>Try to zoom in or click on another place.';
+            }
+            map.removeLayer(marker);
+            marker = tomtom.L.marker(position).addTo(map).bindPopup(popupContent).openPopup();
+            map.setView(marker.getLatLng(), zoom >= map.getMinZoom() ? zoom : map.getZoom());
+        }
+
+        function handleRadiusUpdate() {
+            radiusAmountElement.innerHTML = 'Radius (' + radiusElement.value + ' m)';
+        }
+
+        radiusElement.onchange = handleRadiusUpdate;
+    </script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="js/vendor/jqueryui/jquery-ui.css">
+    <link rel="stylesheet" type="text/css" href="assets/css/tomtom1.css">
+    <link rel="stylesheet" type="text/css" href="assets/css/tomtom2.css">
+    <link rel="stylesheet" type="text/css" href="assets/css/tomtom3.css">
+    <link rel="stylesheet" type="text/css" href="js/vendor/prismjs/themes/prism.css">
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel="stylesheet" type="text/css" href="css/index.css">
+    <link rel="stylesheet" type="text/css" href="elements.css"/>
+
+    <script type="text/javascript" src="js/vendor/jquery/dist/jquery.min.js"></script>
+    <script type="text/javascript" src="js/vendor/jqueryui/jquery-ui.min.js"></script>
+    <script type="text/javascript" src="js/vendor/t.js/t.min.js"></script>
+    <script type="text/javascript" src="js/vendor/iframe-resizer/js/iframeResizer.contentWindow.min.js"></script>
+
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+    <link rel="shortcut icon" type="image/x-icon" href="img/favicon.png"/>
+    <!--[if lt IE 9]>
+    <script src="js/vendor/html5shiv/dist/html5shiv.min.js"></script>
+    <script src="js/vendor/respond/dest/respond.min.js"></script>
+    <![endif]-->
+    <script type='text/javascript' src="js/vendor/clipboard/dist/clipboard.min.js"></script>
+
+    <script type='text/javascript' src="js/vendor/prismjs/prism.js"></script>
+    <script type='text/javascript' src="js/vendor/prismjs/components/prism-javascript.js"></script>
+    <script type='text/javascript' src="js/vendor/prismjs/plugins/normalize-whitespace/prism-normalize-whitespace.js"></script>
+
+
+    <!-- The SDK is loaded here because a hook function is installed in js/index.js to keep track of Map instances -->
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <script type='text/javascript' src="js/index.js"></script>
+    <title>TomTom JS SDK examples</title>
+</head>
+<body class="html not-front logged-in one-sidebar sidebar-first page-node page-node- page-node-321 node-type-documentation adminimal-menu adminimal-frontend menu-render-collapsed og-context og-context-node og-context-node-26 i18n-en navbar-is-fixed-top logo_standard">
+
+<div class="master-container">
+    <div class="page-content">
+        <div class="main-container container">
+            <div class="row">
+                <div id="jssdk-header" class="col-sm-12"></div>
+            </div>
+            <div class="row">
+                <aside id="jssdk-menu" class="col-sm-3"></aside>
+                <section id="jssdk-example-panel"
+                         class="col-sm-9"><h6><!--Header needed to pass W3C validation--></h6>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="menu-template" type="text/template">
+    <div class="region region-sidebar-first well">
+        <section id="block-book-navigation" class="block block-book clearfix">
+            <ul class="menu nav jssdk-menu-group">
+
+            </ul>
+        </section>
+    </div>
+</script>
+<script id="menu-group-template" type="text/template">
+    <li class="expanded active-trail dhtml-menu active dhtml-folder">
+        <a href="#"
+           class="active-trail active">
+            <a href="#" class="dhtml-menu-icon" style="left: -16px; margin-right: -16px;"></a>
+            <a href="#" class="dhtml-menu-header">{{=name}}</a>
+        </a>
+        <ul class="menu nav jssdk-menu-group-elements"></ul>
+    </li>
+</script>
+<script id="menu-group-element-template" type="text/template">
+    <li class="first last leaf dhtml-menu">
+        <a href="#{{=link}}">{{=name}}</a>
+    </li>
+</script>
+
+123
+</body>
+</html>

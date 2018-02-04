@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Adding WMS layer</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        tomtom.map('map', {
+            key: '${api.key}',
+            center: [41, -96],
+            zoom: 4,
+            layers: [
+                tomtom.L.tileLayer.wms('https://api.tomtom.com/map/1/wms/?key=${api.key}', {
+                    layers: 'basic',
+                    format: 'image/jpeg'
+                })
+            ]
+        });
+    </script>
+</body>
+</html>

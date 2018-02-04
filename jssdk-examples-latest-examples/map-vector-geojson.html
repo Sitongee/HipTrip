@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Switching Tiles</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var map = tomtom.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        var languageLabel = L.DomUtil.create('label');
+        languageLabel.innerHTML = 'Maps language';
+        var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'maps');
+        languageLabel.appendChild(languageSelector);
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(languageLabel);
+
+        var polygon = {
+            'type': 'FeatureCollection',
+            'features': [
+                {
+                    'type': 'Feature',
+                    'properties': {},
+                    'geometry': {
+                        'type': 'Polygon',
+                        'coordinates': [
+                            [
+                                [4.876341819763183, 52.36830868438967],
+                                [4.878154993057251, 52.368744313642075],
+                                [4.876947999000549, 52.370280445668364],
+                                [4.874957799911499, 52.36976622405129],
+                                [4.875580072402954, 52.36884912605414],
+                                [4.876341819763183, 52.36830868438967]
+                            ]
+                        ]
+                    }
+                }
+            ]
+        };
+
+        var geoJson = tomtom.L.geoJson(polygon, { style: { color: '#00d7ff', opacity: 0.8 } }).addTo(map);
+        map.fitBounds(geoJson.getBounds(), { padding: [5, 5] });
+    </script>
+</body>
+</html>

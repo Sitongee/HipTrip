@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Distance measurement</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        .input-container label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        .input-container select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var map, controlPanel, unitSelector, unitRow, unitLabel;
+
+        map = tomtom.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        })
+            .setView([52.373154, 4.890659], 14);
+
+        tomtom.distanceMeasurement({
+            useArc: true // Display great circle arcs instead of rect lines
+        }).addTo(map);
+
+        controlPanel = tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true
+        }).addTo(map);
+
+        unitSelector = tomtom.unitSelector.getHtmlElement(tomtom.globalUnitService);
+        unitRow = document.createElement('div');
+        unitLabel = document.createElement('label');
+        unitLabel.innerHTML = 'Unit of measurement';
+        unitLabel.appendChild(unitSelector);
+        unitRow.appendChild(unitLabel);
+        unitRow.className = 'input-container';
+
+        controlPanel.addContent(unitRow);
+
+        L.marker([52.373154, 4.890659], {draggable: true})
+            .bindPopup('Amsterdam City Center')
+            .addTo(map);
+        L.marker([52.379189, 4.899431], {draggable: true})
+            .bindPopup('Amsterdam Central')
+            .addTo(map);
+    </script>
+</body>
+</html>

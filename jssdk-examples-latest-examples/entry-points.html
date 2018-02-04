@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <link rel='stylesheet' href='js/vendor/font-awesome/css/font-awesome.min.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        .input-container label {
+            display: flex;
+            margin: 2px;
+        }
+        .input-container select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body class='use-all-space'>
+<div class='map-container use-all-space'>
+    <div id='map' class='use-all-space'></div>
+</div>
+<script>
+    (function(tomtom) {
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var controlPanel, map, languageSelector, langRow, langLabel, searchBoxInstance, markersLayer, markerOpt, popupOpt;
+        // Setting TomTom keys
+        tomtom.searchKey('${api.key.search}');
+        tomtom.routingKey('${api.key.routing}');
+
+        // Creating map
+        map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+
+        controlPanel = tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true
+        }).addTo(map);
+
+        languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'search');
+
+        langRow = document.createElement('div');
+        langLabel = document.createElement('label');
+        langLabel.innerHTML = 'Search language';
+        langLabel.appendChild(languageSelector);
+        langRow.appendChild(langLabel);
+        langRow.className = 'input-container';
+
+        controlPanel.addContent(langRow);
+
+        searchBoxInstance = tomtom.searchBox({
+            position: 'topright',
+            searchOnDragEnd: false,
+            serviceOptions: {unwrapBbox: true}
+        })
+            .addTo(map);
+        markersLayer = L.tomTomMarkersLayer();
+        markerOpt = {
+            entryPoints: {
+                addCounterToMainPoint: true
+            }
+        };
+        popupOpt = {
+            entryPoints: {
+                popupHoverContent: function(entry, point) {
+                    return point.poi && point.poi.name + ' (entry)';
+                }
+            },
+            enableRoutingActions: true,
+            enableSearchActions: true
+        };
+        markersLayer.setMarkerOptions(markerOpt)
+            .setPopupOptions(popupOpt)
+            .addTo(map);
+
+        searchBoxInstance.on(searchBoxInstance.Events.ResultsFound, function(results) {
+
+            markersLayer.setMarkersData(results.data)
+                .addMarkers();
+            markersLayer.getMarkers().forEach(function(markerLayer) {
+                markerLayer.on('click', function() {
+                    var viewport = markerLayer.options.point.viewport;
+                    if (viewport) {
+                        map.fitBounds([viewport.topLeftPoint, viewport.btmRightPoint]);
+                    } else {
+                        map.panTo(markerLayer.getLatLng());
+                    }
+                });
+            });
+        });
+
+        searchBoxInstance.on(searchBoxInstance.Events.ResultsCleared, function() {
+            markersLayer.clearLayers();
+        });
+
+        searchBoxInstance.on(searchBoxInstance.Events.ResultClicked, function(result) {
+            var viewport;
+            markersLayer.setMarkersData([result.data])
+                .addMarkers();
+
+            viewport = result.data.viewport;
+            if (viewport) {
+                map.fitBounds([viewport.topLeftPoint, viewport.btmRightPoint]);
+            } else {
+                map.fitBounds(markersLayer.getBounds());
+            }
+        });
+
+        function updateLanguageSelection(evt) {
+            searchBoxInstance.language(evt.target.value);
+            searchBoxInstance.search(searchBoxInstance.lastSearchText);
+        }
+        languageSelector.addEventListener('change', updateLanguageSelection);
+    })(tomtom);
+</script>
+</body>
+
+</html>

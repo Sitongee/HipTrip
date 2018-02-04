@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Adding vector layers</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var map = tomtom.map('map', {
+            key: '${api.key}',
+            center: [51.505, -0.09],
+            zoom: 13
+        });
+
+        tomtom.L.circle([51.502, -0.11], 500, {
+            color: 'green',
+            fillColor: '#39ff14',
+            fillOpacity: 0.25
+        }).addTo(map);
+
+        tomtom.L.polygon([
+            [51.512, -0.08],
+            [51.495, -0.06],
+            [51.51, -0.05]
+        ]).addTo(map);
+
+        tomtom.L.marker([51.52, -0.09])
+            .addTo(map);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Routing with arrival and departure time</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='js/vendor/rome/dist/rome.min.css' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css' />
+    <script type='text/javascript' src='js/vendor/rome/dist/rome.min.js'></script>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        input[type=radio] {
+            margin: 3px;
+        }
+        select, input#datetime {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='map-container use-all-space'>
+        <div id='map' class='use-all-space'></div>
+        <div>
+            <label>
+                Type
+                <select id='departOrArrive'>
+                    <option value='departAt'>Depart</option>
+                    <option value='arriveAt'>Arrive</option>
+                </select>
+            </label>
+            <label for='now'>
+                <input type='radio' id='now' name='datetime' checked />
+                now
+            </label>
+            <label for='date'>
+                <input type='radio' id='date' name='datetime' />
+                at
+                <input id='datetime' placeholder='yyyy-MM-dd hh:mm'>
+            </label>
+        </div>
+        <div id='dateTimePicker'></div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var route = null;
+
+        
+        // Setting TomTom keys
+        tomtom.routingKey('${api.key.routing}');
+
+        // Creating map
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+        
+
+        tomtom.controlPanel({
+            position: 'topright',
+            title: null,
+            show: null,
+            close: null,
+            collapsed: false,
+            closeOnMapClick: false
+        })
+            .addTo(map)
+            .addContent(document.getElementById('map').nextElementSibling);
+
+        var dateElement = document.getElementById('date');
+        var dateTimePickerElement = document.getElementById('dateTimePicker');
+        var datetimeElement = document.getElementById('datetime');
+        var nowElement = document.getElementById('now');
+
+        
+        // Initializing datepicker and other HTML elements
+        // We use https://github.com/bevacqua/rome here, feel free to use whatever you want
+        var picker = rome(datetimeElement, {
+            appendTo: dateTimePickerElement,
+            initialValue: (function() {
+                var now = new Date();
+                now.setHours(now.getHours() + 8);
+                return now;
+            }()),
+            weekStart: 1,
+            min: new Date()
+        });
+        var departOrArriveElement = document.getElementById('departOrArrive');
+
+        function calculateRoute(departOrArrive, departOrArriveValue) {
+            tomtom.routing()[departOrArrive](departOrArriveValue)
+                .locations('50.99129,6.89872:50.92901,7.04086')
+                .go()
+                .then(function(routeJson) {
+                    if (route) {
+                        map.removeLayer(route);
+                    }
+                    route = tomtom.L.geoJson(routeJson, {
+                        style: { color: '#06f', opacity: 0.7 }
+                    }).addTo(map);
+                    map.fitBounds(route.getBounds(), { padding: [5, 5] });
+                });
+        }
+
+        function updateLeaveOptions() {
+            var selected = departOrArriveElement.options[departOrArriveElement.selectedIndex].value;
+            nowElement.disabled = selected === 'arriveAt';
+            dateElement.checked = nowElement.disabled || dateElement.checked;
+            calculateRoute(selected, nowElement.checked ? 'now' : datetimeElement.value);
+        }
+
+        departOrArriveElement.onchange = updateLeaveOptions;
+        
+        nowElement.onchange = updateLeaveOptions;
+        dateElement.onchange = updateLeaveOptions;
+        datetimeElement.onclick = function() {
+            dateElement.checked = true;
+        };
+        
+        picker.on('data', updateLeaveOptions);
+        calculateRoute('departAt', 'now');
+        
+    </script>
+</body>
+</html>

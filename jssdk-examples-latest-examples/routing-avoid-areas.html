@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='js/vendor/leaflet-draw/dist/leaflet.draw.css'>    
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>    
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <script type='text/javascript' src='js/vendor/leaflet-draw/dist/leaflet.draw.js'></script>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <div id='loader' class='loader loader-center'></div>
+        <div id='map' class='flex-expand'></div>
+    </div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        var endIcon = tomtom.L.icon({iconUrl: 'img/end.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+        var startIcon = tomtom.L.icon({iconUrl: 'img/start.png', iconSize: [30, 30], iconAnchor: [15, 15]});
+        var map = tomtom.L.map('map', {
+            key: '${api.key}'
+        });
+        var shapes = new L.FeatureGroup();
+        var route;
+
+        var loader = document.getElementById('loader');
+
+        var routeResultsPanel = tomtom.controlPanel({
+            position: 'topright',
+            collapsed: false,
+            close: null,
+            closeOnMapClick: false
+        });
+        routeResultsPanel.addTo(map);
+
+        tomtom.routingKey('${api.key.routing}');
+
+        function showLoader() {
+            loader.style.display = 'block';
+        }
+
+        function hideLoader() {
+            loader.style.display = 'none';
+        }
+
+        function addMarkers(feature) {
+            var startPoint, endPoint;
+            if (feature.geometry.type === 'MultiLineString') {
+                startPoint = feature.geometry.coordinates[0][0].reverse(); //get first point from first line
+                endPoint = feature.geometry.coordinates.slice(-1)[0].slice(-1)[0].reverse(); //get last point from last line
+            } else {
+                startPoint = feature.geometry.coordinates[0].reverse();
+                endPoint = feature.geometry.coordinates.slice(-1)[0].reverse();
+            }
+            tomtom.L.marker(startPoint, {icon: startIcon}).addTo(map);
+            tomtom.L.marker(endPoint, {icon: endIcon}).addTo(map);
+        }
+
+        function displayResults(route) {
+            var container = document.createElement('div');
+            container.className = 'results-list-container';
+            if (typeof route === 'object') {
+                container.innerHTML = '<label>Travel distance: ' + tomtom.unitFormatConverter.formatDistance(route.lengthInMeters) + '</label>';
+                container.innerHTML += '<label>Travel time: ' + tomtom.unitFormatConverter.formatTime(route.travelTimeInSeconds) + '</label>';
+            } else {
+                container.innerHTML = '<label>' + route + '</label>';
+            }
+            routeResultsPanel.setContent(container);
+        }
+
+        function callRouting(areas) {
+            showLoader();
+
+            var parsedAreas = [];
+            var call = tomtom.routing()
+                .locations('52.35967,4.84222:52.19919,5.96008');
+
+            if (areas) {
+                areas.eachLayer(function(layer) {
+                    layer.getBounds();
+                    parsedAreas.push({
+                        southWestCorner: layer.getBounds().getSouthWest(),
+                        northEastCorner: layer.getBounds().getNorthEast()
+                    });
+                });
+                call.avoidAreas(parsedAreas);
+            }
+
+            call.go().then(function(routeJson) {
+                hideLoader();
+                if (route) {
+                    route.remove();
+                }
+
+                if (routeJson.error) {
+                    displayResults(routeJson.error && routeJson.error.description ? routeJson.error.description : 'Error occured.');
+                } else {
+                    route = tomtom.L.geoJson(routeJson, {
+                        onEachFeature: addMarkers,
+                        style: {color: '#00d7ff', opacity: 0.8}
+                    }).addTo(map);
+
+                    displayResults(routeJson.features[0].properties.summary);
+                    map.fitBounds(route.getBounds(), {padding: [25, 25]});
+                }
+            }).catch(function(e) {
+                displayResults(e);
+            });
+        }
+
+        function createDrawToolbar() {
+            var toolbar = new L.Control.Draw({
+                draw: {
+                    polygon: false,
+                    circle: false,
+                    rectangle: true,
+                    marker: false,
+                    polyline: false,
+                    circlemarker: false
+                },
+                edit: {
+                    featureGroup: shapes
+                }
+            });
+            map.addLayer(shapes);
+            return toolbar;
+        }
+        map.addControl(createDrawToolbar());
+
+        map.on('draw:created', function(e) {
+            shapes.addLayer(e.layer);
+            callRouting(shapes);
+        });
+
+        map.on('draw:edited draw:deleted', function() {
+            callRouting(shapes);
+        });
+
+        callRouting();
+    </script>
+</body>
+</html>

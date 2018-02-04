@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Map</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='sdk/map.css' />
+    <link rel='stylesheet' type='text/css' href='elements.css'>
+    <link rel='stylesheet' type='text/css' href='js/vendor/leaflet-draw/dist/leaflet.draw.css'>
+    <link rel='stylesheet' type='text/css' href='assets/css/tomtom2.css'>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+    <script type='text/javascript' src='js/vendor/leaflet-draw/dist/leaflet.draw.js'></script>
+    <style>
+        .geoResponse-result div:first-child,
+        .geoResponse-result-distance {
+            font-weight: 700;
+        }
+
+    </style>
+</head>
+<body class='use-all-space'>
+    <div class='flex-horizontal use-all-space'>
+        <div id='tomtom-example-inputs' class='sidepanel'>
+            <h4>Search parameters</h4>
+            <form onsubmit='return false'>
+                <div id='tomtom-example-inputsWrapper'>
+                    <div id='langParam' class='sidepanel-input-group'>
+                        <label>Language</label>
+                    </div>
+                    <div id='queryParam' class='sidepanel-input-group'>
+                        <input type='text' id='query' name='query' required
+                            placeholder='Search for (e.g. pizza)...'
+                            pattern='.+' title='this field is required'>
+                        <label for='query'>Query</label>
+                    </div>
+                    <div class='sidepanel-input-group'>
+                        <input type='range' id='limit' name='limit' min='1' max='100' value='10'
+                            title='Limit value.'/>
+                        <label id='limitAmount' for='limit'>Limit (10)</label>
+                    </div>
+                </div>
+                <input type='submit' id='tomtom-example-submit' value='Submit' />
+            </form>
+        </div>
+        <div id='map' class='flex-expand'></div>
+    </div>
+    <script>
+        
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        // Setting TomTom keys
+        tomtom.searchKey('${api.key.search}');
+
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        }).setView([51.49912573429843, -0.12582778930664062], 6);
+        
+        var languageSelector = tomtom.languageSelector.getHtmlElement(new tomtom.localeService(), 'search');
+        var langParam = document.getElementById('langParam');
+        langParam.insertBefore(languageSelector, langParam.firstChild);
+
+        
+        // We will show results here
+        var resultsList = tomtom.resultsList()
+            .addTo(map);
+
+        var markersLayer = L.tomTomMarkersLayer();
+        var shapes = new L.FeatureGroup();
+
+        document.getElementById('tomtom-example-submit').onclick = function() {
+            clear();
+            var call = newGeometrySearchCall();
+            if (!call) {
+                return true;
+            }
+            call.go(function(geoResponses) {
+                if (geoResponses && geoResponses.length > 0) {
+                    draw(geoResponses);
+                    map.fitBounds(markersLayer.getBounds());
+                } else {
+                    resultsList.setContent('Results not found.');
+                }
+            });
+            return false;
+        };
+        
+        var limitElement = document.getElementById('limit');
+        limitElement.onchange = function handleRangeUpdate() {
+            document.getElementById('limitAmount').innerHTML = 'Limit (' + limitElement.value + ')';
+        };
+
+        function errorHandler(err) {
+            var div = document.createElement('div');
+            div.className = 'error-foldable';
+            var content = document.createTextNode(err.errorText);
+            div.appendChild(content);
+            resultsList.setContent(div);
+            resultsList.unfold();
+        }
+
+        
+        // API call helper
+        function newGeometrySearchCall() {
+            var selectedLangCode = languageSelector.options[languageSelector.selectedIndex].value;
+            var queryValue = document.getElementById('query').value;
+            var limitValue = document.getElementById('limit').value;
+            var geometrySearchParameter = prepareGeometrySearchParameter();
+
+            if (!geometrySearchParameter) {
+                return null;
+            }
+
+            var call = tomtom
+                .geometrySearch()
+                .fail(errorHandler)
+                .unwrapBbox(true)
+                .geometryList(geometrySearchParameter)
+                .query(queryValue)
+                .limit(limitValue)
+                .language(selectedLangCode);
+
+            return call;
+        }
+        
+
+        function mapLayerToShape(layer) {
+            //Circle
+            if (typeof layer.getRadius !== 'undefined') {
+                var center = layer.getLatLng();
+                return { 'type': 'CIRCLE', 'position': center.lat + ',' + center.lng, 'radius': layer.getRadius() };
+            }
+
+            //Polygon
+            if (typeof layer.getLatLngs !== 'undefined') {
+                var vertices = layer.getLatLngs()[0].map(function(coords) {
+                    return coords.lat + ',' + coords.lng;
+                });
+                return { 'type': 'POLYGON', 'vertices': vertices };
+            }
+            return null;
+        }
+
+        
+        // Prepare parameter using shape drawn on the map
+        function prepareGeometrySearchParameter() {
+            if (shapes.getLayers().length === 0) {
+                tomtom.messageBox({ closeAfter: 1500 }).setContent('No geometry specified!').openOn(map);
+                return null;
+            }
+
+            return shapes.getLayers().map(mapLayerToShape);
+        }
+        
+
+        /*
+         *Gets text for marker
+         */
+        function getResultAddress(result) {
+            if (typeof result.address === 'undefined') {
+                return '';
+            }
+
+            var address = [];
+
+            if (typeof result.address.freeformAddress !== 'undefined') {
+                address.push(result.address.freeformAddress);
+            }
+
+            if (typeof result.address.countryCodeISO3 !== 'undefined') {
+                address.push(result.address.countryCodeISO3);
+            }
+
+            return address.join(', ');
+        }
+
+        /*
+         * Prepare result element for popup and result list
+         */
+        function prepareResultElement(result) {
+            var resultElement = tomtom.L.DomUtil.create('div', 'geoResponse-result');
+            var poi = result.poi && result.poi.name ? result.poi.name : undefined;
+            var address = getResultAddress(result);
+
+            if (typeof poi !== 'undefined') {
+                var poiWrapper = tomtom.L.DomUtil.create('div', 'geoResponse-result-poi');
+                poiWrapper.innerHTML = poi;
+                resultElement.appendChild(poiWrapper);
+            }
+
+            if (typeof address !== 'undefined') {
+                var markerTextWrapper = tomtom.L.DomUtil.create('div', 'geoResponse-result-address');
+                markerTextWrapper.innerHTML = address;
+                resultElement.appendChild(markerTextWrapper);
+            }
+
+            return resultElement;
+        }
+
+        
+        // Draws markers on a map (based on the search results from the service).
+        function draw(searchResponses) {
+            var markerOpt = {
+                noMarkerClustering: true
+            };
+
+            var popupOpt = {
+                popupHoverContent: getResultAddress,
+                popupContent: prepareResultElement
+            };
+
+            markersLayer.setMarkersData(searchResponses)
+                .setMarkerOptions(markerOpt)
+                .setPopupOptions(popupOpt)
+                .addMarkers()
+                .addTo(map);
+
+            resultsList.clear().unfold();
+            markersLayer.getMarkers().forEach(function(markerLayer, index) {
+                var point = searchResponses[index];
+                var geoResponseWrapper = prepareResultElement(point);
+                var viewport = point.viewport;
+                resultsList.addContent(geoResponseWrapper);
+                geoResponseWrapper.onclick = function() {
+                    if (viewport) {
+                        map.fitBounds([viewport.topLeftPoint, viewport.btmRightPoint]);
+                    } else {
+                        map.panTo(markerLayer.getLatLng());
+                    }
+                    markerLayer.openPopup();
+                };
+            });
+
+            drawSearchCenterMarkers();
+        }
+
+        function drawSearchCenterMarkers() {
+            shapes.getLayers().forEach(drawSearchCenterMarker);
+        }
+
+        // Draw search center positon
+        function drawSearchCenterMarker(layer) {
+            var currentLocation;
+            // Circle
+            if (typeof layer.getRadius !== 'undefined') {
+                currentLocation = layer.getLatLng();
+            }
+
+            // Polygon
+            if (typeof layer.getLatLngs !== 'undefined') {
+                currentLocation = layer.getBounds().getCenter();
+            }
+
+            if (typeof currentLocation !== 'undefined') {
+                var markerOptions = {
+                    title: 'Search Center\nLatitude: ' + currentLocation.lat +
+                    '\nLongitude: ' + currentLocation.lng,
+                    icon: tomtom.L.icon({
+                        iconUrl: 'img/center_marker.svg',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    })
+                };
+
+                markersLayer.addLayer(
+                    tomtom.L.marker([currentLocation.lat, currentLocation.lng], markerOptions)
+                ).addTo(map);
+            }
+        }
+
+        
+
+        /*
+         * Clears markers and search results.
+         */
+        function clear() {
+            resultsList.clear();
+            map.removeLayer(markersLayer);
+            markersLayer.clearLayers();
+
+        }
+
+        function newDrawToolbar() {
+            var toolbar = new L.Control.Draw({
+                draw: {
+                    polygon: true,
+                    circle: true,
+                    //
+                    rectangle: false,
+                    marker: false,
+                    polyline: false,
+                    circlemarker: false
+                },
+                edit: {
+                    featureGroup: shapes
+                }
+            });
+            map.addLayer(shapes);
+            return toolbar;
+        }
+        map.addControl(newDrawToolbar());
+
+        map.on('draw:created', function(e) {
+            shapes.addLayer(e.layer);
+        });
+    </script>
+</body>
+</html>

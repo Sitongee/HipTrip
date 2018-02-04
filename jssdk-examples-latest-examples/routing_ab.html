@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta charset='UTF-8'>
+    <title>TomTom JavaScript SDK - Basic routing A-B</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'/>
+    <link rel='stylesheet' type='text/css' href='sdk/map.css'/>
+    <link rel='stylesheet' type='text/css' href='elements.css'/>
+    <style>
+        label {
+            display: flex;
+            align-items: center;
+            margin: 2px;
+        }
+        select {
+            flex: auto;
+            margin-left: 10px;
+        }
+    </style>
+    <script type='text/javascript' src='sdk/tomtom.min.js'></script>
+</head>
+<body class='use-all-space'>
+    <div id='map' class='use-all-space'></div>
+    <script>
+        // Define your product name and version
+        tomtom.setProductInfo('${analytics.productId}', '${analytics.productVersion}');
+        //Setting TomTom keys
+        tomtom.routingKey('${api.key.routing}');
+        tomtom.searchKey('${api.key.search}');
+
+        // Creating map
+        var map = tomtom.L.map('map', {
+            key: '${api.key}',
+            source: 'vector',
+            basePath: '${base.path}'
+        });
+        map.zoomControl.setPosition('topright');
+
+        var unitSelector = tomtom.unitSelector.getHtmlElement(tomtom.globalUnitService);
+        var languageSelector = tomtom.languageSelector.getHtmlElement(tomtom.globalLocaleService, 'search');
+
+        var unitRow = document.createElement('div');
+        var unitLabel = document.createElement('label');
+        unitLabel.innerHTML = 'Unit of measurement';
+        unitLabel.appendChild(unitSelector);
+        unitRow.appendChild(unitLabel);
+        unitRow.className = 'input-container';
+
+        var langRow = document.createElement('div');
+        var langLabel = document.createElement('label');
+        langLabel.innerHTML = 'Search language';
+        langLabel.appendChild(languageSelector);
+        langRow.appendChild(langLabel);
+        langRow.className = 'input-container';
+
+        tomtom.controlPanel({
+            position: 'bottomright',
+            title: 'Settings',
+            collapsed: true
+        })
+            .addTo(map)
+            .addContent(unitRow)
+            .addContent(langRow);
+
+        // Relocating zoom buttons
+        map.zoomControl.setPosition('bottomleft');
+
+        // Adding the route widget
+        var routeOnMapView = tomtom.routeOnMap({
+            // Options for the route start marker
+            startMarker: {
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/start.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            },
+            // Options for the route end marker
+            endMarker: {
+                icon: tomtom.L.icon({
+                    iconUrl: 'img/end.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }
+        }).addTo(map);
+
+        // Creating route inputs widget
+        var routeInputsInstance = tomtom.routeInputs({location: false})
+            .addTo(map);
+
+        // Connecting the route inputs widget with the route widget
+        routeInputsInstance.on(routeInputsInstance.Events.LocationsFound, function(eventObject) {
+            routeOnMapView.draw(eventObject.points);
+        });
+
+        routeInputsInstance.on(routeInputsInstance.Events.LocationsCleared, function(eventObject) {
+            routeOnMapView.draw(eventObject.points);
+        });
+
+    </script>
+</body>
+</html>
